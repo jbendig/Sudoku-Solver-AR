@@ -1,5 +1,11 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.6.2)
 
+PROJECT(sudoku_solver_ar)
+
+IF(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+	SET(LINUX True)
+ENDIF()
+
 FIND_PROGRAM(CCACHE_FOUND ccache)
 IF(CCACHE_FOUND)
 	SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE})
@@ -7,12 +13,20 @@ IF(CCACHE_FOUND)
 ENDIF()
 
 SET(SOURCE_FILES
+	src/Camera.cpp
 	src/Game.cpp
 	src/main.cpp
+	src/Painter.cpp
+	src/ShaderProgram.cpp
 	src/Solve.cpp
 )
 
-SET(CMAKE_CXX_FLAGS_RELEASE " -O2 -s")
+IF(LINUX)
+	SET(CMAKE_CXX_FLAGS_RELEASE " -O2 -s")
+ENDIF()
 
-PROJECT(sudoku_solver)
-ADD_EXECUTABLE(sudoku_solver ${SOURCE_FILES})
+ADD_EXECUTABLE(sudoku_solver_ar ${SOURCE_FILES})
+IF(LINUX)
+	SET_TARGET_PROPERTIES(sudoku_solver_ar PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -std=c++1z")
+	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw GL)
+ENDIF()
