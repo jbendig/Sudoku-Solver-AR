@@ -11,6 +11,7 @@
 
 #include "Solve.h"
 #include <algorithm>
+#include <iterator>
 #include <set>
 #include <stack>
 #include "Game.h"

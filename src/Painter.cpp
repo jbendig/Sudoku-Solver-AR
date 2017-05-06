@@ -10,12 +10,16 @@
 // except according to those terms.
 
 #include "Painter.h"
+#ifdef __linux
 #include <GLES3/gl3.h>
+#elif defined _WIN32
+#include <GL/glew.h>
+#endif
 #include "Image.h"
 
 Painter::Painter(const unsigned int windowWidth,const unsigned int windowHeight)
-	: windowWidth(windowWidth),
-	  windowHeight(windowHeight),
+	: windowWidth(static_cast<float>(windowWidth)),
+	  windowHeight(static_cast<float>(windowHeight)),
 	  imageProgram(ShaderProgram::FromFile("image.vert","image.frag").value()),
 	  lineProgram(ShaderProgram::FromFile("line.vert","line.frag").value())
 {
@@ -23,6 +27,9 @@ Painter::Painter(const unsigned int windowWidth,const unsigned int windowHeight)
 
 void Painter::DrawImage(const float x,float y,float width,float height,const Image& image)
 {
+	if(image.data.empty())
+		return;
+
 	imageProgram.Use();
 
 	//Convert coordinates from origin being the top left and the range being 0 to windowWidth and 0

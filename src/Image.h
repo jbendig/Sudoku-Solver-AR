@@ -19,6 +19,13 @@ struct Image
 	unsigned int width;
 	unsigned int height;
 	std::vector<unsigned char> data;
+
+	Image()
+		: width(0),
+		  height(0),
+		  data()
+	{
+	}
 };
 
 #endif

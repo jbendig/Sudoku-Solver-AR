@@ -13,14 +13,18 @@
 #define CAMERA_H
 
 #include <vector>
-#include <experimental/optional>
 #ifdef __linux
+#include <experimental/optional>
 #include <linux/videodev2.h>
+#elif defined _WIN32
+#include <optional>
+#include "ComHelp.h"
+struct IMFSourceReader;
 #else
 #error "Platform not supported"
 #endif
 
-class Image;
+struct Image;
 
 class Camera
 {
@@ -28,7 +32,13 @@ class Camera
 		Camera(Camera&& other);
 		~Camera();
 
-		static std::experimental::optional<Camera> Open(const std::string& devicePath);
+		static
+#ifdef __linux
+			std::experimental::optional<Camera>
+#elif defined _WIN32
+			std::optional<Camera>
+#endif
+			Open(const std::string& devicePath);
 		//TODO: Support camera enumeration.
 
 		bool CaptureFrameRGB(Image& frame);
@@ -37,11 +47,17 @@ class Camera
 #ifdef __linux
 		int fd;
 		v4l2_format format;
-#endif
 		std::vector<unsigned char> buffer;
+#elif defined _WIN32
+		ComPtr<IMFSourceReader> sourceReader;
+		unsigned int frameWidth;
+		unsigned int frameHeight;
+#endif
 
 #ifdef __linux
 		Camera(const int fd,const v4l2_format& format);
+#elif defined _WIN32
+		Camera(ComPtr<IMFSourceReader> sourceReader,const unsigned int frameWidth,const unsigned int frameHeight);
 #endif
 		Camera(const Camera&)=delete;
 		Camera& operator=(Camera&)=delete;

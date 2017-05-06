@@ -14,7 +14,7 @@
 
 #include "ShaderProgram.h"
 
-class Image;
+struct Image;
 
 class Painter
 {
