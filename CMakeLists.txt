@@ -22,9 +22,9 @@ IF(CCACHE_FOUND)
 ENDIF()
 
 SET(SOURCE_FILES
+	src/sudoku_solver_ar.cpp
 	src/Camera.cpp
 	src/Game.cpp
-	src/main.cpp
 	src/Painter.cpp
 	src/ShaderProgram.cpp
 	src/Solve.cpp
@@ -41,3 +41,9 @@ ELSEIF(WIN32)
 	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw3 opengl32 glew32s mfplat mfreadwrite mf mfuuid)
 	TARGET_INCLUDE_DIRECTORIES(sudoku_solver_ar PRIVATE "${GLFW_INCLUDE_DIR}" "${GLES3_INCLUDE_DIR}" "${GLEW_INCLUDE_DIR}")
 ENDIF()
+
+IF(LINUX)
+	ADD_EXECUTABLE(sudoku_solver src/sudoku_solver.cpp src/Game.cpp src/Solve.cpp)
+	SET_TARGET_PROPERTIES(sudoku_solver PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -std=c++1z")
+ENDIF()
+
