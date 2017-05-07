@@ -119,7 +119,8 @@ static void NV12ToGreyscale(const unsigned char* nv12Data,Image& frame)
 }
 
 #ifdef __linux
-static bool CaptureAndPrepareFrame(const int fd,const v4l2_format& format,std::vector<unsigned char>& buffer,Image& frame)
+template <void(*ProcessFunc)(const std::vector<unsigned char>&,Image&)>
+static bool CaptureAndProcessFrame(const int fd,const v4l2_format& format,std::vector<unsigned char>& buffer,Image& frame)
 {
 	assert(buffer.size() == format.fmt.pix.sizeimage);
 
@@ -130,6 +131,8 @@ static bool CaptureAndPrepareFrame(const int fd,const v4l2_format& format,std::v
 	frame.width = format.fmt.pix.width;
 	frame.height = format.fmt.pix.height;
 	frame.data.resize(frame.width * frame.height * 3);
+
+	ProcessFunc(buffer,frame);
 
 	return true;
 }
@@ -281,12 +284,7 @@ Camera::Open(const std::string& devicePath)
 bool Camera::CaptureFrameRGB(Image& frame)
 {
 #ifdef __linux
-	if(!CaptureAndPrepareFrame(fd,format,buffer,frame))
-		return false;
-
-	YUYVToRGB(buffer,frame);
-
-	return true;
+	return CaptureAndProcessFrame<YUYVToRGB>(fd,format,buffer,frame);
 #elif defined _WIN32
 	return CaptureAndProcessFrame<NV12ToRGB>(sourceReader,frameWidth,frameHeight,frame);
 #endif
@@ -295,12 +293,7 @@ bool Camera::CaptureFrameRGB(Image& frame)
 bool Camera::CaptureFrameGreyscale(Image& frame)
 {
 #ifdef __linux
-	if(!CaptureAndPrepareFrame(fd,format,buffer,frame))
-		return false;
-
-	YUYVToGreyscale(buffer,frame);
-
-	return true;
+	return CaptureAndProcessFrame<YUYVToGreyscale>(fd,format,buffer,frame);
 #elif defined _WIN32
 	return CaptureAndProcessFrame<NV12ToGreyscale>(sourceReader,frameWidth,frameHeight,frame);
 #endif
