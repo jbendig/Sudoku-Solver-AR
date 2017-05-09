@@ -34,7 +34,7 @@ void CheckGLError()
 	std::abort();
 }
 
-void FindLines(const Image& houghTransformInputFrame,const Image& houghTransformFrame,std::vector<std::pair<float,float>>& lines)
+void FindLines(const unsigned int targetWidth,const unsigned int targetHeight,const Image& houghTransformFrame,std::vector<std::pair<float,float>>& lines)
 {
 	//Find peaks using a sliding window. A peak exists when all surrounding pixels within some
 	//radius are lower than the center pixel.
@@ -84,7 +84,7 @@ void FindLines(const Image& houghTransformInputFrame,const Image& houghTransform
 				//TODO: Maybe simplify how rho is stored...
 				float theta = static_cast<float>(x) / static_cast<float>(houghTransformFrame.width) * M_PI;
 				const float rMultiplier = static_cast<float>(houghTransformFrame.height) / 2.0f;
-				const float maxR = hypotf(houghTransformInputFrame.width,houghTransformInputFrame.height);
+				const float maxR = hypotf(targetWidth,targetHeight);
 				float rho = (static_cast<float>(y) - rMultiplier) * maxR / rMultiplier;
 
 				//Make sure rho is always in a positive form to simplify working with the lines.
@@ -222,6 +222,18 @@ void DrawHoughTransform(Painter& painter,const float windowWidth,const float win
 					  modifiedHTF);
 }
 
+void FitImage(const unsigned int windowWidth,const unsigned int windowHeight,const Image& image,unsigned int& x,unsigned int& y,unsigned int& width,unsigned int& height)
+{
+	const float hRatio = static_cast<float>(image.width) / static_cast<float>(windowWidth);
+	const float vRatio = static_cast<float>(image.height) / static_cast<float>(windowHeight);
+	const float scale = 1.0f / std::max(hRatio,vRatio);
+
+	width = image.width * scale;
+	height = image.height * scale;
+	x = abs(static_cast<int>(windowWidth) - static_cast<int>(width)) / 2;
+	y = abs(static_cast<int>(windowHeight) - static_cast<int>(height)) / 2;
+}
+
 #ifdef __linux
 int main(int argc,char* argv[])
 #elif defined _WIN32
@@ -242,13 +254,13 @@ int __stdcall WinMain(void*,void*,void*,int)
 	glewInit();
 #endif
 
-	int width = 0;
-	int height = 0;
-	glfwGetFramebufferSize(window,&width,&height);
-	glViewport(0,0,width,height);
+	int windowWidth = 0;
+	int windowHeight = 0;
+	glfwGetFramebufferSize(window,&windowWidth,&windowHeight);
+	glViewport(0,0,windowWidth,windowHeight);
 	CheckGLError();
 
-	Painter painter(width,height);
+	Painter painter(windowWidth,windowHeight);
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
 	Image greyscaleFrame;
@@ -265,6 +277,13 @@ int __stdcall WinMain(void*,void*,void*,int)
 		//Read frame.
 		camera.CaptureFrameRGB(frame);
 
+		//Figure out how to draw image so that it fits window.
+		unsigned int drawImageX = 0;
+		unsigned int drawImageY = 0;
+		unsigned int drawImageWidth = 0;
+		unsigned int drawImageHeight = 0;
+		FitImage(windowWidth,windowHeight,frame,drawImageX,drawImageY,drawImageWidth,drawImageHeight);
+
 		//Process frame.
 		RGBToGreyscale(frame,greyscaleFrame);
 		canny.Process(greyscaleFrame,cannyFrame);
@@ -272,18 +291,14 @@ int __stdcall WinMain(void*,void*,void*,int)
 
 		HoughTransform(cannyFrame,houghTransformFrame);
 
+		std::vector<std::pair<float,float>> lines;
+		FindLines(drawImageWidth,drawImageHeight,houghTransformFrame,lines);
+
 		//Draw frame (and any debugging info).
 		//TODO: Fit each frame into a box based on number of frames being drawn.
-#ifdef __linux
-		painter.DrawImage(50,50,640,480,mergedFrame);
-#elif defined _WIN32
-		painter.DrawImage(0,0,640,360,frame);
-#endif
-		DrawHoughTransform(painter,width,height,houghTransformFrame,0.75f);
-
-		std::vector<std::pair<float,float>> lines;
-		FindLines(cannyFrame,houghTransformFrame,lines);
-		DrawLines(painter,50,50,640,480,lines);
+		painter.DrawImage(drawImageX,drawImageY,drawImageWidth,drawImageHeight,mergedFrame);
+		DrawHoughTransform(painter,windowWidth,windowHeight,houghTransformFrame,0.75f);
+		DrawLines(painter,drawImageX,drawImageY,drawImageWidth,drawImageHeight,lines);
 
 		CheckGLError();
 		glfwSwapBuffers(window);
