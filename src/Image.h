@@ -13,6 +13,7 @@
 #define IMAGE_H
 
 #include <vector>
+#include <cassert>
 
 struct Image
 {
@@ -25,6 +26,21 @@ struct Image
 		  height(0),
 		  data()
 	{
+	}
+
+	Image(const unsigned int width,const unsigned int height)
+		: width(width),
+		  height(height),
+		  data(width * height * 3)
+	{
+	}
+
+	void MatchSize(const Image& other)
+	{
+		width = other.width;
+		height = other.height;
+		data.resize(width * height * 3);
+		assert(data.size() == other.data.size());
 	}
 };
 

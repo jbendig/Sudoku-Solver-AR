@@ -25,6 +25,7 @@ SET(SOURCE_FILES
 	src/sudoku_solver_ar.cpp
 	src/Camera.cpp
 	src/Game.cpp
+	src/ImageProcessing.cpp
 	src/Painter.cpp
 	src/ShaderProgram.cpp
 	src/Solve.cpp
