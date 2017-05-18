@@ -120,8 +120,15 @@ void DrawLines(Painter& painter,const float x,const float y,const float width,co
 	for(auto line : lines)
 	{
 		//Based on the equation x*cos(theta) + y*sin(theta) = rho.
-		const float theta = line.first;
-		const float rho = line.second;
+		float theta = line.first;
+		float rho = line.second;
+
+		//Rho should be positive to simplify finding clipping points below.
+		if(rho < 0.0f)
+		{
+			theta = fmodf(theta + M_PI,2.0f * M_PI);
+			rho *= -1.0f;
+		}
 
 		//Get a point on the line. The actual line is 90 degrees from theta at this point.
 		const float cosTheta = cosf(theta);
