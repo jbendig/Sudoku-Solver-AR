@@ -12,6 +12,8 @@
 #ifndef PAINTER_H
 #define PAINTER_H
 
+#include <vector>
+#include "Geometry.h"
 #include "ShaderProgram.h"
 
 struct Image;
@@ -23,11 +25,15 @@ class Painter
 
 		void DrawImage(const float x,float y,float width,float height,const Image& image);
 		void DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue);
+		void DrawPoints(const std::vector<std::pair<float,float>>& points,const unsigned char red,const unsigned char green,const unsigned char blue);
+
+		void ExtractImage(const Image& srcImage,const std::vector<Point>& srcPoints,const float srcPointScaleX,const float srcPointScaleY,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight); //Note: This modifies glViewport.
 	private:
 		float windowWidth;
 		float windowHeight;
 		ShaderProgram imageProgram;
 		ShaderProgram lineProgram;
+		ShaderProgram pointProgram;
 
 		Painter(Painter&& other)=delete;
 		Painter(const Painter&)=delete;

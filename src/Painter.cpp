@@ -128,3 +128,107 @@ void Painter::DrawLine(float x1,float y1,float x2,float y2,const unsigned char r
 	glDeleteVertexArrays(1,&vao);
 	glUseProgram(0);
 }
+
+void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPoints,const float srcPointScaleX,const float srcPointScaleY,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight)
+{
+	//srcPoints should be 4x4 points that are used for generating where srcImage will be sampled.
+	//The extra points are used to reduce the bilinear artifacts when performing a perspective warp.
+	//See Digital Image Warping section 7.2.3.
+
+	if(srcImage.data.empty())
+		return;
+	if(srcPoints.size() != 16)
+		return;
+
+	imageProgram.Use();
+
+	std::vector<GLfloat> vertices;
+	for(unsigned int y = 0; y < 4;y++)
+	{
+		for(unsigned int x = 0;x < 4;x++)
+		{
+			vertices.push_back(-1.0f + x * 2.0f / 3.0f); //X
+			vertices.push_back(-1.0f + y * 2.0f / 3.0f); //Y
+			vertices.push_back(0.0f); //Z
+
+			const unsigned int srcPointsIndex = (y * 4) + x;
+			vertices.push_back(srcPoints[srcPointsIndex].x * srcPointScaleX); //U
+			vertices.push_back(srcPoints[srcPointsIndex].y * srcPointScaleY); //V
+		}
+	}
+
+	const GLuint indices[] = {
+		0,1,5,
+		0,5,4,
+		1,2,6,
+		1,6,5,
+		2,3,7,
+		2,7,6,
+		4,5,9,
+		4,9,8,
+		5,6,10,
+		5,10,9,
+		6,7,11,
+		6,11,10,
+		8,9,13,
+		8,13,12,
+		9,10,14,
+		9,14,13,
+		10,11,15,
+		10,15,14,
+	};
+
+	GLuint outputTexture;
+	glGenTextures(1,&outputTexture);
+	glBindTexture(GL_TEXTURE_2D,outputTexture);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,dstImageWidth,dstImageHeight,0,GL_RGB,GL_UNSIGNED_BYTE,nullptr);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+
+	GLuint inputTexture;
+	glGenTextures(1,&inputTexture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,inputTexture);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glUniform1i(imageProgram.Uniform("inputTexture"),0);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,srcImage.width,srcImage.height,0,GL_RGB,GL_UNSIGNED_BYTE,&srcImage.data[0]);
+
+	GLuint fbo;
+	glGenFramebuffers(1,&fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,outputTexture,0);
+	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+	GLuint vao;
+	glGenVertexArrays(1,&vao);
+	glBindVertexArray(vao);
+
+	GLuint vbo;
+	glGenBuffers(1,&vbo);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo);
+	glBufferData(GL_ARRAY_BUFFER,vertices.size() * sizeof(float),&vertices[0],GL_STATIC_DRAW);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
+	glEnableVertexAttribArray(1);
+
+	glViewport(0,0,static_cast<float>(dstImageWidth),static_cast<float>(dstImageHeight));
+	glDrawElements(GL_TRIANGLES,18*3,GL_UNSIGNED_INT,indices);
+
+	dstImage.width = dstImageWidth;
+	dstImage.height = dstImageHeight;
+	dstImage.data.resize(dstImage.width * dstImage.height * 3);
+	glReadPixels(0,0,dstImage.width,dstImage.height,GL_RGB,GL_UNSIGNED_BYTE,&dstImage.data[0]);
+
+	glBindVertexArray(0);
+
+	glDeleteBuffers(1,&vbo);
+	glDeleteVertexArrays(1,&vao);
+	glDeleteFramebuffers(1,&fbo);
+	glDeleteTextures(1,&inputTexture);
+	glDeleteTextures(1,&outputTexture);
+	glUseProgram(0);
+}
