@@ -115,7 +115,7 @@ void FindLines(const unsigned int targetWidth,const unsigned int targetHeight,co
 	}
 }
 
-void DrawLines(Painter& painter,const float x,const float y,const float width,const float height,const std::vector<std::pair<float,float>>& lines)
+void DrawLines(Painter& painter,const float x,const float y,const float width,const float height,const std::vector<std::pair<float,float>>& lines,const unsigned char red,const unsigned char green,const unsigned char blue)
 {
 	for(auto line : lines)
 	{
@@ -136,7 +136,7 @@ void DrawLines(Painter& painter,const float x,const float y,const float width,co
 							 y,
 							 x + xPoint,
 							 y + height,
-							 0,255,0);
+							 red,green,blue);
 			continue;
 		}
 
@@ -200,7 +200,7 @@ void DrawLines(Painter& painter,const float x,const float y,const float width,co
 						 y + y1,
 						 x + x2,
 						 y + y2,
-						 0,255,255);
+						 red,green,blue);
 	}
 }
 
