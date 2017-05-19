@@ -232,3 +232,29 @@ void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPo
 	glDeleteTextures(1,&outputTexture);
 	glUseProgram(0);
 }
+
+void Painter::ScaleImage(const Image& srcImage,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight)
+{
+	std::vector<Point> points = {
+		{0.0f,0.0f},
+		{1/3.0f,0.0f},
+		{2/3.0f,0.0f},
+		{1.0f,0.0f},
+
+		{0.0f,1/3.0f},
+		{1/3.0f,1/3.0f},
+		{2/3.0f,1/3.0f},
+		{1.0f,1/3.0f},
+
+		{0.0f,2/3.0f},
+		{1/3.0f,2/3.0f},
+		{2/3.0f,2/3.0f},
+		{1.0f,2/3.0f},
+
+		{0.0f,1.0f},
+		{1/3.0f,1.0f},
+		{2/3.0f,1.0f},
+		{1.0f,1.0f},
+	};
+	ExtractImage(srcImage,points,1.0f,1.0f,dstImage,dstImageWidth,dstImageHeight);
+}
