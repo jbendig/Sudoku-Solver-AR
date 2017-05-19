@@ -12,6 +12,9 @@
 #include "PuzzleFinder.h"
 #include <algorithm>
 #include <cmath>
+#ifdef _WIN32
+#include <intrin.h>
+#endif
 #include "Image.h"
 
 //An angle must be +/- this delta to be considered similar.
@@ -194,7 +197,11 @@ static void FindPossiblePuzzleLines(std::vector<std::vector<Line>>& lineClusters
 		const unsigned int finalSubset = 0b1111 << (lineCluster.size() - 4);
 		for(unsigned int x = 0;x < finalSubset + 1;x++)
 		{
+#ifdef __linux
 			const unsigned int count = __builtin_popcount(x);
+#elif defined _WIN32
+			const unsigned int count = __popcnt(x);
+#endif
 			if(count != 4)
 				continue;
 
