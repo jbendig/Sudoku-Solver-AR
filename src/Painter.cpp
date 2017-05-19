@@ -91,6 +91,86 @@ void Painter::DrawImage(const float x,float y,float width,float height,const Ima
 	glUseProgram(0);
 }
 
+void Painter::DrawImage(const std::vector<Point>& targetPoints,const Image& image)
+{
+	if(image.data.empty())
+		return;
+	if(targetPoints.size() != 16)
+		return;
+
+	imageProgram.Use();
+
+	std::vector<GLfloat> vertices;
+	for(unsigned int y = 0; y < 4;y++)
+	{
+		for(unsigned int x = 0;x < 4;x++)
+		{
+			const unsigned int targetPointsIndex = (y * 4) + x;
+			vertices.push_back((targetPoints[targetPointsIndex].x / windowWidth) * 2.0f - 1.0f); //X
+			vertices.push_back(1.0f - (targetPoints[targetPointsIndex].y / windowHeight) * 2.0f); //Y
+			vertices.push_back(0.0f); //Z
+
+			vertices.push_back(x * 1.0f / 3.0f); //U
+			vertices.push_back(y * 1.0f / 3.0f); //V
+		}
+	}
+
+	const GLuint indices[] = {
+		0,1,5,
+		0,5,4,
+		1,2,6,
+		1,6,5,
+		2,3,7,
+		2,7,6,
+		4,5,9,
+		4,9,8,
+		5,6,10,
+		5,10,9,
+		6,7,11,
+		6,11,10,
+		8,9,13,
+		8,13,12,
+		9,10,14,
+		9,14,13,
+		10,11,15,
+		10,15,14,
+	};
+
+	GLuint texture;
+	glGenTextures(1,&texture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,texture);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+	glUniform1i(imageProgram.Uniform("inputTexture"),0);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,image.width,image.height,0,GL_RGB,GL_UNSIGNED_BYTE,&image.data[0]);
+
+	GLuint vao;
+	glGenVertexArrays(1,&vao);
+	glBindVertexArray(vao);
+
+	GLuint vbo;
+	glGenBuffers(1,&vbo);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo);
+	glBufferData(GL_ARRAY_BUFFER,vertices.size() * sizeof(float),&vertices[0],GL_STATIC_DRAW);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
+	glEnableVertexAttribArray(1);
+
+	glDrawElements(GL_TRIANGLES,18*3,GL_UNSIGNED_INT,indices);
+
+	glBindVertexArray(0);
+
+	glDeleteBuffers(1,&vbo);
+	glDeleteVertexArrays(1,&vao);
+	glDeleteTextures(1,&texture);
+	glUseProgram(0);
+}
+
+
 void Painter::DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue)
 {
 	lineProgram.Use();

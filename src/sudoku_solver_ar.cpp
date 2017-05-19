@@ -208,6 +208,43 @@ void FitImage(const unsigned int windowWidth,const unsigned int windowHeight,con
 	y = abs(static_cast<int>(windowHeight) - static_cast<int>(height)) / 2;
 }
 
+Image GeneratePlaceholderAnswerImage()
+{
+	constexpr unsigned int IMAGE_WIDTH = 600;
+	constexpr unsigned int IMAGE_HEIGHT = 600;
+	constexpr unsigned int BOX_WIDTH = 33;
+	constexpr unsigned int BOX_HEIGHT = 33;
+	constexpr float DX = ((IMAGE_WIDTH / 9.0f) - BOX_WIDTH) / 2.0f;
+	constexpr float DY = ((IMAGE_HEIGHT / 9.0f) - BOX_HEIGHT) / 2.0f;
+
+	Image image(IMAGE_WIDTH,IMAGE_HEIGHT);
+	std::fill(image.data.begin(),image.data.end(),0);
+
+	auto DrawBox = [&](const unsigned int x,const unsigned int y,const unsigned int width,const unsigned int height)
+	{
+		for(unsigned int v = y;v < y + height;v++)
+		{
+			for(unsigned int h = x;h < x + width;h++)
+			{
+				const unsigned int index = (v * image.width + h) * 3;
+				image.data[index + 0] = 255;
+				image.data[index + 1] = 0;
+				image.data[index + 2] = 0;
+			}
+		}
+	};
+
+	for(unsigned int y = 0;y < 9;y++)
+	{
+		for(unsigned int x = 0;x < 9;x++)
+		{
+			DrawBox(lround(DX + 2 * x * DX + x * BOX_WIDTH),lround(DY + 2 * y * DY + y * BOX_HEIGHT),BOX_WIDTH,BOX_HEIGHT);
+		}
+	}
+
+	return image;
+}
+
 void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
 {
 	if(action != GLFW_PRESS)
@@ -290,6 +327,19 @@ int __stdcall WinMain(void*,void*,void*,int)
 		glViewport(0,0,windowWidth,windowHeight);
 		painter.DrawImage(drawImageX,drawImageY,drawImageWidth,drawImageHeight,mergedFrame);
 		painter.DrawImage(800,0,PUZZLE_IMAGE_WIDTH,PUZZLE_IMAGE_HEIGHT,puzzleFrame);
+
+		//Draw answer composite over puzzle if available.
+		if(!puzzlePoints.empty())
+		{
+			//TODO: Generate answer texture here instead of using placeholder.
+			const Image answerImage = GeneratePlaceholderAnswerImage();
+
+			glEnable(GL_BLEND);
+			glBlendEquationSeparate(GL_MAX,GL_MAX);
+			glBlendFuncSeparate(GL_SRC_COLOR,GL_DST_COLOR,GL_ONE,GL_ZERO);
+			painter.DrawImage(puzzlePoints,answerImage);
+			glDisable(GL_BLEND);
+		}
 
 		//Draw debug info.
 		if(drawLines)
