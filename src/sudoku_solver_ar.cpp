@@ -88,7 +88,6 @@ void DrawLines(Painter& painter,const float x,const float y,const float width,co
 		const float m = -(cosf(theta) / sinf(theta));
 		const float b = -xPoint * m;
 
-
 		//Spots where the line intersects the image.
 		const float leftVertical = yPoint + b;
 		const float topHorizontal = (-yPoint - b) / m;
