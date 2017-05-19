@@ -347,6 +347,11 @@ int __stdcall WinMain(void*,void*,void*,int)
 			glEnable(GL_BLEND);
 			glBlendEquationSeparate(GL_MAX,GL_MAX);
 			glBlendFuncSeparate(GL_SRC_COLOR,GL_DST_COLOR,GL_ONE,GL_ZERO);
+			for(Point& point : puzzlePoints)
+			{
+				point.x += drawImageX;
+				point.y += drawImageY;
+			}
 			painter.DrawImage(puzzlePoints,answerImage);
 			glDisable(GL_BLEND);
 		}
