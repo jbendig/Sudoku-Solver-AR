@@ -289,6 +289,8 @@ int __stdcall WinMain(void*,void*,void*,int)
 	Painter painter(windowWidth,windowHeight);
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
+	Image downscaledFrame;
+	Image* inputFrame = &frame;;
 	Image greyscaleFrame;
 	Image cannyFrame;
 	Canny canny = Canny::WithRadius(5.0f);
@@ -311,16 +313,25 @@ int __stdcall WinMain(void*,void*,void*,int)
 		unsigned int drawImageHeight = 0;
 		FitImage(windowWidth - PUZZLE_IMAGE_WIDTH,windowHeight,frame,drawImageX,drawImageY,drawImageWidth,drawImageHeight);
 
+		if(frame.width * frame.height > drawImageWidth * drawImageHeight)
+		{
+			painter.ScaleImage(frame,downscaledFrame,drawImageWidth,drawImageHeight);
+			inputFrame = &downscaledFrame;
+		}
+		else
+			inputFrame = &frame;
+
 		//Process frame.
-		RGBToGreyscale(frame,greyscaleFrame);
+		greyscaleFrame.MatchSize(*inputFrame);
+		RGBToGreyscale(&inputFrame->data[0],greyscaleFrame);
 		canny.Process(greyscaleFrame,cannyFrame);
-		BlendAdd(frame,cannyFrame,mergedFrame);
+		BlendAdd(*inputFrame,cannyFrame,mergedFrame);
 
 		HoughTransform(cannyFrame,houghTransformFrame);
 
 		std::vector<Point> puzzlePoints;
 		if(puzzleFinder.Find(drawImageWidth,drawImageHeight,houghTransformFrame,puzzlePoints))
-			painter.ExtractImage(frame,puzzlePoints,1.0f / drawImageWidth,1.0f / drawImageHeight,puzzleFrame,PUZZLE_IMAGE_WIDTH,PUZZLE_IMAGE_HEIGHT);
+			painter.ExtractImage(*inputFrame,puzzlePoints,1.0f / drawImageWidth,1.0f / drawImageHeight,puzzleFrame,PUZZLE_IMAGE_WIDTH,PUZZLE_IMAGE_HEIGHT);
 
 		//Draw frame and extracted puzzle if available.
 		glViewport(0,0,windowWidth,windowHeight);

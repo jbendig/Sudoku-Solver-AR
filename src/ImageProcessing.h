@@ -16,11 +16,13 @@
 #include "Image.h"
 
 //Color conversion operations.
-void YUYVToRGB(const std::vector<unsigned char>& yuyvData,Image& frame);
-void YUYVToGreyscale(const std::vector<unsigned char>& yuyvData,Image& frame);
+void YUYVToRGB(const unsigned char* yuyvData,Image& frame);
+void YUYVToGreyscale(const unsigned char* yuyvData,Image& frame);
 void NV12ToRGB(const unsigned char* nv12Data,Image& frame);
 void NV12ToGreyscale(const unsigned char* nv12Data,Image& frame);
-void RGBToGreyscale(const Image& inputImage,Image& outputImage);
+void RGBToRGB(const unsigned char* rgbData,Image& frame);
+void RGBToGreyscale(const unsigned char* rgbData,Image& frame);
+void BGRVerticalMirroredToRGB(const unsigned char* bgrData,Image& frame);
 
 //RGB operations.
 void BlendAdd(const Image& image1,const Image& image2,Image& outputImage);

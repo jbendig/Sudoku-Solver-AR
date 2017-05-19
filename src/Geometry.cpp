@@ -10,6 +10,7 @@
 // except according to those terms.
 
 #include "Geometry.h"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 
@@ -49,8 +50,8 @@ float MeanTheta(const std::vector<Line>& lines)
 float DifferenceTheta(const float theta1,const float theta2)
 {
 	//Find angle difference while taking wrapping into account.
-	return std::min(fabs(theta1 - theta2),
-					std::min(theta1,theta2) + 2.0f * M_PI - std::max(theta1,theta2));
+	return std::min(fabsf(theta1 - theta2),
+					std::min(theta1,theta2) + 2.0f * static_cast<float>(M_PI) - std::max(theta1,theta2));
 }
 
 bool IntersectLines(const Line& line1,const Line& line2,float& intersectionX,float& intersectionY)
