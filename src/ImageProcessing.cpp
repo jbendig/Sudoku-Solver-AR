@@ -632,10 +632,9 @@ Canny Canny::WithRadius(const float gaussianBlurRadius)
 void Canny::Process(const Image& inputImage,Image& outputImage)
 {
 	Gaussian(inputImage,gaussianImage,gaussianBlurRadius);
-	AutoLevels(gaussianImage,autoLevelsImage,static_cast<unsigned int>(gaussianBlurRadius) + 1);
-	Sobel(autoLevelsImage,gradient);
+	Sobel(gaussianImage,gradient);
 
-	Histogram(autoLevelsImage,normalizedHistogram);
+	Histogram(gaussianImage,normalizedHistogram);
 	const float highThreshold = OtsusMethod(normalizedHistogram);
 	const float lowThreshold = highThreshold / 2;
 	NonMaximumSuppression(gradient,inputImage.width,inputImage.height,nonMaximumSuppression.data,lowThreshold,highThreshold);

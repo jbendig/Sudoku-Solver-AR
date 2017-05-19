@@ -45,7 +45,6 @@ class Canny
 		//Internal use only variables kept around to avoid large repeated allocations. Made public
 		//to ease debugging.
 		Image gaussianImage;
-		Image autoLevelsImage;
 		std::vector<float> normalizedHistogram;
 		std::vector<float> gradient;
 		Image nonMaximumSuppression;
