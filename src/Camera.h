@@ -53,11 +53,19 @@ class Camera
 		unsigned int frameWidth;
 		unsigned int frameHeight;
 #endif
+		enum class VideoFormat
+		{
+			YUYV,
+			NV12,
+			RGB,
+			BGR,
+		};
+		VideoFormat videoFormat;
 
 #ifdef __linux
-		Camera(const int fd,const v4l2_format& format);
+		Camera(const int fd,const v4l2_format& format,const VideoFormat videoFormat);
 #elif defined _WIN32
-		Camera(ComPtr<IMFSourceReader> sourceReader,const unsigned int frameWidth,const unsigned int frameHeight);
+		Camera(ComPtr<IMFSourceReader> sourceReader,const unsigned int frameWidth,const unsigned int frameHeight,const VideoFormat videoFormat);
 #endif
 		Camera(const Camera&)=delete;
 		Camera& operator=(Camera&)=delete;

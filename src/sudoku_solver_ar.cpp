@@ -276,7 +276,8 @@ int __stdcall WinMain(void*,void*,void*,int)
 		FitImage(windowWidth - PUZZLE_IMAGE_WIDTH,windowHeight,frame,drawImageX,drawImageY,drawImageWidth,drawImageHeight);
 
 		//Process frame.
-		RGBToGreyscale(frame,greyscaleFrame);
+		greyscaleFrame.MatchSize(frame);
+		RGBToGreyscale(&frame.data[0],greyscaleFrame);
 		canny.Process(greyscaleFrame,cannyFrame);
 		BlendAdd(frame,cannyFrame,mergedFrame);
 

@@ -214,7 +214,7 @@ static void NonMaximumSuppression(const std::vector<float>& gradient,const unsig
 	}
 }
 
-void YUYVToRGB(const std::vector<unsigned char>& yuyvData,Image& frame)
+void YUYVToRGB(const unsigned char* yuyvData,Image& frame)
 {
 	for(unsigned int x = 0;x < frame.width * frame.height;x+=2)
 	{
@@ -238,7 +238,7 @@ void YUYVToRGB(const std::vector<unsigned char>& yuyvData,Image& frame)
 	}
 }
 
-void YUYVToGreyscale(const std::vector<unsigned char>& yuyvData,Image& frame)
+void YUYVToGreyscale(const unsigned char* yuyvData,Image& frame)
 {
 	for(unsigned int x = 0;x < frame.width * frame.height;x+=2)
 	{
@@ -299,23 +299,42 @@ void NV12ToGreyscale(const unsigned char* nv12Data,Image& frame)
 	}
 }
 
-void RGBToGreyscale(const Image& inputImage,Image& outputImage)
+void RGBToRGB(const unsigned char* rgbData,Image& frame)
 {
-	outputImage.MatchSize(inputImage);
+	memcpy(&frame.data[0],rgbData,frame.width * frame.height * 3);
+}
 
-	for(unsigned int x = 0;x < outputImage.width * outputImage.height;x++)
+void RGBToGreyscale(const unsigned char* rgbData,Image& frame)
+{
+	for(unsigned int x = 0;x < frame.width * frame.height;x++)
 	{
 		const unsigned int index = x * 3;
 
 		//RGB to luma (BT.601 Y'UV).
-		const float lumaf = 0.299f * inputImage.data[index + 0] +
-							0.587f * inputImage.data[index + 1] +
-							0.114f * inputImage.data[index + 2];
+		const float lumaf = 0.299f * rgbData[index + 0] +
+							0.587f * rgbData[index + 1] +
+							0.114f * rgbData[index + 2];
 		const unsigned char luma = ClampToU8(lumaf);
 
-		outputImage.data[index + 0] = luma;
-		outputImage.data[index + 1] = luma;
-		outputImage.data[index + 2] = luma;
+		frame.data[index + 0] = luma;
+		frame.data[index + 1] = luma;
+		frame.data[index + 2] = luma;
+	}
+}
+
+void BGRVerticalMirroredToRGB(const unsigned char* bgrData,Image& frame)
+{
+	for(unsigned int y = 0;y < frame.height;y++)
+	{
+		for(unsigned int x = 0;x < frame.width;x++)
+		{
+			const unsigned int inputIndex = ((frame.height - y - 1) * frame.width + x) * 3;
+			const unsigned int outputIndex = (y * frame.width + x) * 3;
+
+			frame.data[outputIndex + 0] = bgrData[inputIndex + 2];
+			frame.data[outputIndex + 1] = bgrData[inputIndex + 1];
+			frame.data[outputIndex + 2] = bgrData[inputIndex + 0];
+		}
 	}
 }
 

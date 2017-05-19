@@ -29,7 +29,7 @@
 #include "ImageProcessing.h"
 
 #ifdef __linux
-template <void(*ProcessFunc)(const std::vector<unsigned char>&,Image&)>
+template <void(*ProcessFunc)(const unsigned char*,Image&)>
 static bool CaptureAndProcessFrame(const int fd,const v4l2_format& format,std::vector<unsigned char>& buffer,Image& frame)
 {
 	assert(buffer.size() == format.fmt.pix.sizeimage);
@@ -42,7 +42,7 @@ static bool CaptureAndProcessFrame(const int fd,const v4l2_format& format,std::v
 	frame.height = format.fmt.pix.height;
 	frame.data.resize(frame.width * frame.height * 3);
 
-	ProcessFunc(buffer,frame);
+	ProcessFunc(&buffer[0],frame);
 
 	return true;
 }
@@ -94,6 +94,8 @@ Camera::Camera(Camera&& other)
 	other.fd = -1;
 	std::swap(buffer,other.buffer);
 #endif
+
+	videoFormat = other.videoFormat;
 }
 
 Camera::~Camera()
@@ -182,45 +184,75 @@ Camera::Open(const std::string& devicePath)
 	UINT32 frameRateDenominator = 0; //Fetched for debug reasons but not used.
 	TRY_COM(MFGetAttributeRatio(mediaType,MF_MT_FRAME_RATE,&frameRateNumerator,&frameRateDenominator));
 
-	//Try to force NV12 format.
-	//TODO: Support other formats, this just happens to be what my camera uses.
-	TRY_COM(mediaType->SetGUID(MF_MT_SUBTYPE,MFVideoFormat_NV12));
+	//Try to force native format if we support it..
+	//TODO: Support other formats, these just happen to be what my cameras use.
+	VideoFormat videoFormat;
+	if(nativeType == MFVideoFormat_NV12)
+		videoFormat = VideoFormat::NV12;
+	else if(nativeType == MFVideoFormat_RGB24)
+		videoFormat = VideoFormat::BGR; //Yup, MFVideoFormat_RGB24 is BGR!
+	else
+		return {}; //Not supported.
+	TRY_COM(mediaType->SetGUID(MF_MT_SUBTYPE,nativeType));
 	TRY_COM(sourceReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM,nullptr,mediaType));
 
-	return Camera(std::move(sourceReader),frameWidth,frameHeight);
+	return Camera(std::move(sourceReader),frameWidth,frameHeight,videoFormat);
 #endif
 }
 
+#ifdef __linux
+#define CAPTURE_AND_PROCESS_FRAME_PARAMS fd,format,buffer,frame
+#elif defined _WIN32
+#define CAPTURE_AND_PROCESS_FRAME_PARAMS sourceReader,frameWidth,frameHeight,frame
+#endif
 bool Camera::CaptureFrameRGB(Image& frame)
 {
-#ifdef __linux
-	return CaptureAndProcessFrame<YUYVToRGB>(fd,format,buffer,frame);
-#elif defined _WIN32
-	return CaptureAndProcessFrame<NV12ToRGB>(sourceReader,frameWidth,frameHeight,frame);
-#endif
+	switch(videoFormat)
+	{
+		case VideoFormat::YUYV:
+			return CaptureAndProcessFrame<YUYVToRGB>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::NV12:
+			return CaptureAndProcessFrame<NV12ToRGB>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::RGB:
+			return CaptureAndProcessFrame<RGBToRGB>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::BGR:
+			return CaptureAndProcessFrame<BGRVerticalMirroredToRGB>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		default:
+			std::abort();
+	};
 }
 
 bool Camera::CaptureFrameGreyscale(Image& frame)
 {
-#ifdef __linux
-	return CaptureAndProcessFrame<YUYVToGreyscale>(fd,format,buffer,frame);
-#elif defined _WIN32
-	return CaptureAndProcessFrame<NV12ToGreyscale>(sourceReader,frameWidth,frameHeight,frame);
-#endif
+	switch(videoFormat)
+	{
+		case VideoFormat::YUYV:
+			return CaptureAndProcessFrame<YUYVToGreyscale>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::NV12:
+			return CaptureAndProcessFrame<NV12ToGreyscale>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::RGB:
+			return CaptureAndProcessFrame<RGBToGreyscale>(CAPTURE_AND_PROCESS_FRAME_PARAMS);
+		case VideoFormat::BGR:
+		default:
+			std::abort();
+	}
 }
+#undef CAPTURE_AND_PROCESS_FRAME_PARAMS
 
 #ifdef __linux
-Camera::Camera(const int fd,const v4l2_format& format)
+Camera::Camera(const int fd,const v4l2_format& format,const VideoFormat videoFormat)
 	: fd(fd),
 	  format(format),
-	  buffer(format.fmt.pix.sizeimage)
+	  buffer(format.fmt.pix.sizeimage),
+	  videoFormat(videoFormat)
 {
 }
 #elif defined _WIN32
-Camera::Camera(ComPtr<IMFSourceReader> sourceReader,const unsigned int frameWidth,const unsigned int frameHeight)
+Camera::Camera(ComPtr<IMFSourceReader> sourceReader,const unsigned int frameWidth,const unsigned int frameHeight,const VideoFormat videoFormat)
 	: sourceReader(std::move(sourceReader)),
 	  frameWidth(frameWidth),
-	  frameHeight(frameHeight)
+	  frameHeight(frameHeight),
+	  videoFormat(videoFormat)
 {
 }
 #endif
