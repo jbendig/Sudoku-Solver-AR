@@ -4,6 +4,18 @@
 
 All of the image processing and computer vision code is written from scratch and does not use any external libraries.
 
+## Progress
+
+* [x] Capture video from webcam
+* [x] Preprocess image processing
+* [x] Line detection
+* [x] Puzzle detection
+* [x] Puzzle dewarp
+* [ ] OCR numbers
+* [x] Solve puzzle
+* [ ] Render puzzle solution
+* [x] Composite solution over original puzzle
+
 ## Building and Running
 
 ### Linux
