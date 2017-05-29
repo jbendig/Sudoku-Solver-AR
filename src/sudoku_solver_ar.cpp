@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <random>
 #include <tuple>
 #include <cassert>
 #include <cmath>
@@ -26,6 +27,7 @@
 #include "Geometry.h"
 #include "Image.h"
 #include "ImageProcessing.h"
+#include "NeuralNetwork.h"
 #include "Painter.h"
 #include "PuzzleFinder.h"
 
@@ -344,6 +346,72 @@ static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
 	}
 }
 
+static void PrepareOCRNeuralNetwork(Painter& painter)
+{
+	auto ImageToData = [](const Image& image)
+	{
+		//Assumes image is greyscale and just copies red-channel to data.
+		std::vector<unsigned char> data(image.width * image.height);
+		for(unsigned int x = 0;x < image.width * image.height;x++)
+		{
+			data[x] = image.data[x * 3];
+		}
+
+		return data;
+	};
+
+	//Render a bunch of random puzzles using the following fonts. Each puzzle is processed with
+	//noise to help improve training results.
+	std::vector<std::pair<std::vector<unsigned char>,unsigned char>> trainingData;
+	std::vector<std::string> fonts = {
+		"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",
+		"/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+		"/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
+		"/usr/share/fonts/google-droid/DroidSans.ttf",
+	};
+	for(const std::string& font : fonts)
+	{
+		for(unsigned int x = 0;x < 10;x++)
+		{
+			std::vector<unsigned char> digits;
+			for(unsigned int x = 0;x < 81;x++)
+			{
+				digits.push_back(rand() % 10);
+			}
+
+			Image puzzleFrame;
+			RenderPuzzle(painter,font,digits,puzzleFrame);
+			//TODO: Perform perspective warp and then de-warp to add more noise.
+			std::vector<Image> puzzleTiles;
+			ExtractPuzzleTiles(puzzleFrame,puzzleTiles);
+			for(unsigned int x = 0;x < puzzleTiles.size();x++)
+			{
+				trainingData.push_back({ImageToData(puzzleTiles[x]),digits[x]});
+			}
+		}
+	}
+
+	//Randomize puzzles so NN doesn't over train to a specific font.
+	std::random_device randomDevice;
+	std::mt19937 randomNumberGenerator(randomDevice());
+	std::shuffle(trainingData.begin(),trainingData.end(),randomNumberGenerator);
+
+	//Train neural network. It will likely take many hours.
+	NeuralNetwork nn = NeuralNetwork::Train(trainingData);
+
+	//Measure how accurate the NN is.
+	unsigned int correct = 0;
+	for(const auto& td : trainingData)
+	{
+		if(nn.Run(td.first) == td.second)
+			correct += 1;
+	}
+	std::cout << "Identified " << correct << " out of " << trainingData.size() << std::endl;
+
+	//TODO: Remove the following line once NN becomes usable.
+	std::abort();
+}
+
 void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
 {
 	if(action != GLFW_PRESS)
@@ -387,6 +455,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 	glfwGetFramebufferSize(window,&windowWidth,&windowHeight);
 
 	Painter painter;
+	PrepareOCRNeuralNetwork(painter);
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
 	Image downscaledFrame;

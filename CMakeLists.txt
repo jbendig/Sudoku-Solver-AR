@@ -18,6 +18,11 @@ ENDIF()
 FIND_PACKAGE(Freetype REQUIRED)
 INCLUDE_DIRECTORIES("${FREETYPE_INCLUDE_DIRS}")
 
+IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	FIND_PACKAGE(OpenMP)
+	SET(EXTRA_CXX_FLAGS "-march=native") # GCC only because it makes performance about 2x slower on Clang.
+ENDIF()
+
 FIND_PROGRAM(CCACHE_FOUND ccache)
 IF(CCACHE_FOUND)
 	SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE})
@@ -27,9 +32,12 @@ ENDIF()
 SET(SOURCE_FILES
 	src/sudoku_solver_ar.cpp
 	src/Camera.cpp
+	src/DeltaTimer.cpp
 	src/Game.cpp
 	src/Geometry.cpp
 	src/ImageProcessing.cpp
+	src/NeuralNetwork.cpp
+	src/NeuralNetworkData.cpp
 	src/Painter.cpp
 	src/PuzzleFinder.cpp
 	src/ShaderProgram.cpp
@@ -38,8 +46,8 @@ SET(SOURCE_FILES
 
 ADD_EXECUTABLE(sudoku_solver_ar ${GUI_TYPE} ${SOURCE_FILES})
 IF(LINUX)
-	SET_TARGET_PROPERTIES(sudoku_solver_ar PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -std=c++1z")
-	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw GL ${FREETYPE_LIBRARIES})
+	SET_TARGET_PROPERTIES(sudoku_solver_ar PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -std=c++1z ${EXTRA_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw GL ${FREETYPE_LIBRARIES} gomp)
 	ADD_CUSTOM_TARGET(run DEPENDS sudoku_solver_ar WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COMMAND "${CMAKE_BINARY_DIR}/sudoku_solver_ar" || true)
 	ADD_CUSTOM_TARGET(debug DEPENDS sudoku_solver_ar WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COMMAND "gdb" "${CMAKE_BINARY_DIR}/sudoku_solver_ar" "-ex" "run" || true)
 ELSEIF(WIN32)
