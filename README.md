@@ -13,7 +13,7 @@ All of the image processing and computer vision code is written from scratch and
 * [x] Puzzle dewarp
 * [ ] OCR numbers
 * [x] Solve puzzle
-* [ ] Render puzzle solution
+* [x] Render puzzle solution
 * [x] Composite solution over original puzzle
 
 ## Building and Running

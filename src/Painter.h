@@ -21,18 +21,17 @@ struct Image;
 class Painter
 {
 	public:
-		Painter(const unsigned int windowWidth,const unsigned int windowHeight);
+		Painter();
 
 		void DrawImage(const float x,float y,float width,float height,const Image& image);
 		void DrawImage(const std::vector<Point>& targetPoints,const Image& image);
 		void DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue);
 
-		//These functions modify glViewport and draw to an alternative framebuffer.
+		//These draw to an alternative framebuffer.
 		void ExtractImage(const Image& srcImage,const std::vector<Point>& srcPoints,const float srcPointScaleX,const float srcPointScaleY,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight);
 		void ScaleImage(const Image& srcImage,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight);
+		void DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,const float noiseDelta,Image& dstImage);
 	private:
-		float windowWidth;
-		float windowHeight;
 		ShaderProgram imageProgram;
 		ShaderProgram lineProgram;
 

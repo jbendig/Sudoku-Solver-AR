@@ -10,6 +10,8 @@
 // except according to those terms.
 
 #include "Painter.h"
+#include <random>
+#include <cmath>
 #ifdef __linux
 #include <GLES3/gl3.h>
 #elif defined _WIN32
@@ -17,10 +19,45 @@
 #endif
 #include "Image.h"
 
-Painter::Painter(const unsigned int windowWidth,const unsigned int windowHeight)
-	: windowWidth(static_cast<float>(windowWidth)),
-	  windowHeight(static_cast<float>(windowHeight)),
-	  imageProgram(ShaderProgram::FromFile("image.vert","image.frag").value()),
+
+namespace
+{
+
+class Viewport
+{
+	public:
+		Viewport(const int width,const int height)
+		{
+			Viewport::Get(oldViewportWidth,oldViewportHeight);
+			glViewport(0,0,width,height);
+		}
+
+		~Viewport()
+		{
+			glViewport(0,0,oldViewportWidth,oldViewportHeight);
+		}
+
+		template <class T>
+		static void Get(T& width,T& height)
+		{
+			int data[4];
+			glGetIntegerv(GL_VIEWPORT,data);
+			width = static_cast<T>(data[2]);
+			height = static_cast<T>(data[3]);
+		}
+	private:
+		int oldViewportWidth;
+		int oldViewportHeight;
+
+		Viewport(Viewport&&)=delete;
+		Viewport(const Viewport&)=delete;
+		Viewport& operator=(Viewport&)=delete;
+};
+
+};
+
+Painter::Painter()
+	: imageProgram(ShaderProgram::FromFile("image.vert","image.frag").value()),
 	  lineProgram(ShaderProgram::FromFile("line.vert","line.frag").value())
 {
 }
@@ -31,6 +68,10 @@ void Painter::DrawImage(const float x,float y,float width,float height,const Ima
 		return;
 
 	imageProgram.Use();
+
+	float windowWidth = 0.0f;
+	float windowHeight = 0.0f;
+	Viewport::Get(windowWidth,windowHeight);
 
 	//Convert coordinates from origin being the top left and the range being 0 to windowWidth and 0
 	//to windowHeight to Normalized Device Coordinates where the origin is the center and the range
@@ -99,6 +140,10 @@ void Painter::DrawImage(const std::vector<Point>& targetPoints,const Image& imag
 		return;
 
 	imageProgram.Use();
+
+	float windowWidth = 0.0f;
+	float windowHeight = 0.0f;
+	Viewport::Get(windowWidth,windowHeight);
 
 	std::vector<GLfloat> vertices;
 	for(unsigned int y = 0; y < 4;y++)
@@ -170,10 +215,13 @@ void Painter::DrawImage(const std::vector<Point>& targetPoints,const Image& imag
 	glUseProgram(0);
 }
 
-
 void Painter::DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue)
 {
 	lineProgram.Use();
+
+	float windowWidth = 0.0f;
+	float windowHeight = 0.0f;
+	Viewport::Get(windowWidth,windowHeight);
 
 	const float redf = red / 255.0f;
 	const float greenf = green / 255.0f;
@@ -295,7 +343,7 @@ void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPo
 	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
 	glEnableVertexAttribArray(1);
 
-	glViewport(0,0,static_cast<float>(dstImageWidth),static_cast<float>(dstImageHeight));
+	Viewport viewport(dstImageWidth,dstImageHeight);
 	glDrawElements(GL_TRIANGLES,18*3,GL_UNSIGNED_INT,indices);
 
 	dstImage.width = dstImageWidth;
@@ -337,4 +385,89 @@ void Painter::ScaleImage(const Image& srcImage,Image& dstImage,const unsigned in
 		{1.0f,1.0f},
 	};
 	ExtractImage(srcImage,points,1.0f,1.0f,dstImage,dstImageWidth,dstImageHeight);
+}
+
+void Painter::DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,const float noiseDelta,Image& dstImage)
+{
+	GLuint outputTexture;
+	glGenTextures(1,&outputTexture);
+	glBindTexture(GL_TEXTURE_2D,outputTexture);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,srcImage.width,srcImage.height,0,GL_RGB,GL_UNSIGNED_BYTE,&srcImage.data[0]);
+
+	GLuint fbo;
+	glGenFramebuffers(1,&fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,outputTexture,0);
+	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+	Viewport viewport(srcImage.width,srcImage.height);
+
+	//Draw border.
+	glLineWidth(borderLineWidth);
+	DrawLine(0,0,srcImage.width,0,0,0,0);
+	DrawLine(srcImage.width,0,srcImage.width,srcImage.height,0,0,0);
+	DrawLine(0,srcImage.height,srcImage.width,srcImage.height,0,0,0);
+	DrawLine(0,0,0,srcImage.height,0,0,0);
+
+	//Draw grid.
+	for(unsigned int x = 1;x < 9;x++)
+	{
+		if((x % 3) == 0)
+			glLineWidth(gridMajorLineWidth);
+		else
+			glLineWidth(gridMinorLineWidth);
+
+		const float dx = x * (srcImage.width / 9.0f);
+		const float dy = x * (srcImage.height / 9.0f);
+		DrawLine(dx,0,dx,srcImage.height,0,0,0);
+		DrawLine(0,dy,srcImage.width,dy,0,0,0);
+	}
+
+	//Create a noise textures and use blending to apply them.
+	Image addNoiseImage(srcImage.width,srcImage.height);
+	Image subNoiseImage(srcImage.width,srcImage.height);
+	std::random_device randomDevice;
+	std::mt19937 randomNumberGenerator(randomDevice());
+	for(unsigned int x = 0;x < addNoiseImage.width * addNoiseImage.height;x++)
+	{
+		const unsigned int index = x * 3;
+		const int value = lrint((randomNumberGenerator() / static_cast<double>(std::mt19937::max()) - 0.5) * noiseDelta * 255.0);
+		if(value >= 0)
+		{
+			addNoiseImage.data[index + 0] = value;
+			addNoiseImage.data[index + 1] = value;
+			addNoiseImage.data[index + 2] = value;
+			subNoiseImage.data[index + 0] = 0;
+			subNoiseImage.data[index + 1] = 0;
+			subNoiseImage.data[index + 2] = 0;
+		}
+		else
+		{
+			addNoiseImage.data[index + 0] = 0;
+			addNoiseImage.data[index + 1] = 0;
+			addNoiseImage.data[index + 2] = 0;
+			subNoiseImage.data[index + 0] = -value;
+			subNoiseImage.data[index + 1] = -value;
+			subNoiseImage.data[index + 2] = -value;
+		}
+	}
+
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ONE);
+	glBlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
+	DrawImage(0,0,addNoiseImage.width,addNoiseImage.height,addNoiseImage);
+	glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT,GL_FUNC_ADD);
+	DrawImage(0,0,subNoiseImage.width,subNoiseImage.height,subNoiseImage);
+	glDisable(GL_BLEND);
+
+	//Extract final image.
+	dstImage.MatchSize(srcImage);
+	glReadPixels(0,0,dstImage.width,dstImage.height,GL_RGB,GL_UNSIGNED_BYTE,&dstImage.data[0]);
+
+	glDeleteFramebuffers(1,&fbo);
+	glDeleteTextures(1,&outputTexture);
+	glLineWidth(1.0f);
+	glUseProgram(0);
 }

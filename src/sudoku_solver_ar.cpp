@@ -14,6 +14,8 @@
 #include <tuple>
 #include <cassert>
 #include <cmath>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 #ifdef __linux
 #include <GLES3/gl3.h>
 #elif defined _WIN32
@@ -244,6 +246,104 @@ Image GeneratePlaceholderAnswerImage()
 	return image;
 }
 
+static void RenderPuzzle(Painter& painter,const std::string& font,const std::vector<unsigned char>& digits,Image& image)
+{
+	auto DrawBitmapCentered = [&image](unsigned int offsetX,unsigned int offsetY,const unsigned int targetWidth,const unsigned int targetHeight,FT_Bitmap& bitmap)
+	{
+		offsetX += (targetWidth - bitmap.width) / 2;
+		offsetY += (targetHeight - bitmap.rows) / 2;
+
+		for(unsigned int y = 0;y < bitmap.rows;y++)
+		{
+			for(unsigned int x = 0;x < bitmap.width;x++)
+			{
+				const unsigned int inputIndex = (y * bitmap.pitch) + x;
+				const unsigned int outputIndex = ((y + offsetY) * image.width + x + offsetX) * 3;
+				image.data[outputIndex + 0] = 255 - bitmap.buffer[inputIndex];
+				image.data[outputIndex + 1] = 255 - bitmap.buffer[inputIndex];
+				image.data[outputIndex + 2] = 255 - bitmap.buffer[inputIndex];
+			}
+		}
+	};
+
+	assert(digits.size() == 9*9);
+	image.width = 600;
+	image.height = 600;
+	image.data.resize(image.width * image.height * 3);
+	std::fill(image.data.begin(),image.data.end(),255);
+
+	FT_Library ftLibrary;
+	if(FT_Init_FreeType(&ftLibrary) != FT_Err_Ok)
+		std::abort();
+
+	FT_Face face;
+	if(FT_New_Face(ftLibrary,font.c_str(),0,&face) != FT_Err_Ok)
+		std::abort();
+	if(FT_Set_Pixel_Sizes(face,0,64) != FT_Err_Ok)
+		std::abort();
+
+	const float dx = image.width / 9.0f;
+	const float dy = image.height / 9.0f;
+	for(unsigned int y = 0;y < 9;y++)
+	{
+		for(unsigned int x = 0;x < 9;x++)
+		{
+			const unsigned int digitIndex = y * 9 + x;
+			if(digits[digitIndex] == 0)
+				continue;
+
+			if(FT_Load_Char(face,digits[digitIndex] + '0',FT_LOAD_RENDER) != FT_Err_Ok)
+				std::abort();
+
+			DrawBitmapCentered(lrintf(x * dx),lrintf(y * dy),dx,dy,face->glyph->bitmap);
+		}
+	}
+
+	FT_Done_FreeType(ftLibrary);
+
+	Image srcImage = image;
+	painter.DrawPuzzleOverlay(srcImage,4.0f,1.0f,3.0f,0.15f,image);
+}
+
+static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
+{
+	auto ExtractImage = [&image](const unsigned int x,const unsigned int y,unsigned int width,unsigned int height)
+	{
+		Image extractedImage(width,height);
+		std::fill(extractedImage.data.begin(),extractedImage.data.end(),255);
+
+		assert(x < image.width);
+		assert(y < image.height);
+		width = std::min(width,image.width - x);
+		height = std::min(height,image.height - y);
+
+		const unsigned int span = width * 3;
+		for(unsigned int row = 0;row < height;row++)
+		{
+			const unsigned int inputIndex = (((row + y) * image.width) + x) * 3;
+			const unsigned int outputIndex = row * extractedImage.width * 3;
+			memcpy(&extractedImage.data[outputIndex],&image.data[inputIndex],span);
+		}
+
+		return extractedImage;
+	};
+
+	tiles.clear();
+	if(image.width == 0 || image.height == 0)
+		return;
+
+	const unsigned int dx = lrintf(image.width / 9.0f);
+	const unsigned int dy = lrintf(image.height / 9.0f);
+	for(unsigned int y = 0;y < 9;y++)
+	{
+		for(unsigned int x = 0;x < 9;x++)
+		{
+			const Image image = ExtractImage(x * dx,y * dy,dx,dy);
+			tiles.push_back(image);
+		}
+	}
+}
+
 void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
 {
 	if(action != GLFW_PRESS)
@@ -286,7 +386,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 	int windowHeight = 0;
 	glfwGetFramebufferSize(window,&windowWidth,&windowHeight);
 
-	Painter painter(windowWidth,windowHeight);
+	Painter painter;
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
 	Image downscaledFrame;
