@@ -30,23 +30,71 @@ static float SigmoidDiff(const float sigmoidValue)
 	return sigmoidValue * (1 - sigmoidValue);
 }
 
-template <class T>
-static void RunNeuron(const std::vector<float>& weights,const std::vector<T>& input,float& output)
+static void UpdateWeights(const std::vector<float>& input,const float multiplier,std::vector<float>& weights)
 {
-	assert(weights.size() == input.size() + 1);
+	assert(input.size() <= weights.size());
+
+	for(unsigned int x = 0;x < input.size();x++)
+	{
+		weights[x] += input[x] * multiplier;
+	}
+}
+
+static void RunNeuron(const std::vector<float>& weights,const std::vector<float>& input,float& output)
+{
+	assert(input.size() <= weights.size());
 
 	float sum = 0.0f;
-	for(unsigned int x = 0;x < weights.size() - 1;x++)
+	for(unsigned int x = 0;x < input.size();x++)
 	{
 		sum += weights[x] * static_cast<float>(input[x]);
 	}
-	sum += weights.back();
 
 	output = Sigmoid(sum);
 }
 
+static void RunNetwork(const std::vector<std::vector<std::vector<float>>>& layers,const std::vector<float>& data,std::vector<std::vector<float>>& layerOutputs)
+{
+	for(unsigned int x = 0;x < layers.size();x++)
+	{
+		const std::vector<std::vector<float>>& layer = layers[x];
+
+		std::vector<float>& outputs = layerOutputs[x];
+#pragma omp parallel for
+		for(unsigned int y = 0;y < layer.size();y++)
+		{
+			const std::vector<float>& weights = layer[y];
+
+			float output = 0.0f;
+			if(x == 0)
+				RunNeuron(weights,data,output);
+			else
+				RunNeuron(weights,layerOutputs[x - 1],output);
+
+			outputs[y] = output;
+		}
+	}
+}
+
 template <class T>
-static void RunNetwork(const std::vector<std::vector<std::vector<float>>>& layers,const std::vector<T>& data,std::vector<std::vector<float>>& layerOutputs)
+static void RunNeuronTrained(const std::vector<float>& weights,const std::vector<T>& input,float& output)
+{
+	assert(input.size() < weights.size());
+
+	float sum = 0.0f;
+	for(unsigned int x = 0;x < input.size();x++)
+	{
+		sum += weights[x] * static_cast<float>(input[x]);
+	}
+	sum += weights[input.size()];
+
+	output = Sigmoid(sum);
+}
+
+//RunNetworkTrained is used on a trained network. It differs from the training version in that the
+//input data should not be preprocessed.
+template <class T>
+static void RunNetworkTrained(const std::vector<std::vector<std::vector<float>>>& layers,const std::vector<T>& data,std::vector<std::vector<float>>& layerOutputs)
 {
 	//Reserve buffer space only on first call. Not safe but this is measurably faster.
 	if(layerOutputs.empty())
@@ -70,9 +118,9 @@ static void RunNetwork(const std::vector<std::vector<std::vector<float>>>& layer
 
 			float output = 0.0f;
 			if(x == 0)
-				RunNeuron(weights,data,output);
+				RunNeuronTrained(weights,data,output);
 			else
-				RunNeuron(weights,layerOutputs[x - 1],output);
+				RunNeuronTrained(weights,layerOutputs[x - 1],output);
 
 			outputs[y] = output;
 		}
@@ -109,7 +157,6 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 
 	//Train by back propagation.
 	const float correctionIncrement = 0.005f;
-	std::vector<std::vector<float>> layerOutputs;
 	std::vector<float> expectedOutput;
 	std::vector<std::vector<float>> layerLittleDeltas(nn.data->layers.size());
 	DeltaTimer deltaTimer;
@@ -121,36 +168,31 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 		float totalError = 0;
 		for(const std::pair<std::vector<float>,unsigned char>& data : nn.data->trainingData)
 		{
-			RunNetwork(nn.data->layers,data.first,layerOutputs);
+			RunNetwork(nn.data->layers,data.first,nn.data->layerOutputs);
 			ExpectedOutput(nn.data->outputChoices,data.second,expectedOutput);
 
 			//Adjust the output weights first.
 			std::vector<std::vector<float>>& outputLayer = nn.data->layers.back();
-			const std::vector<float>& outputs = layerOutputs.back();
+			const std::vector<float>& outputs = nn.data->layerOutputs.back();
 			layerLittleDeltas.back().resize(outputLayer.size());
 			for(unsigned int y = 0;y < outputLayer.size();y++)
 			{
 				const float littleDelta = (expectedOutput[y] - outputs[y]) * SigmoidDiff(outputs[y]);
+				layerLittleDeltas.back()[y] = littleDelta;
 				totalError += fabsf(littleDelta);
+
 				const float multiplier = correctionIncrement * littleDelta;
 				std::vector<float>& weights = outputLayer[y];
-				for(unsigned int z = 0;z < weights.size() - 1;z++)
-				{
-					const float weightChange = layerOutputs[layerOutputs.size() - 2][z] * multiplier;
-					weights[z] += weightChange;
-				}
-				weights.back() += multiplier;
-
-				layerLittleDeltas.back()[y] = littleDelta;
+				UpdateWeights(nn.data->layerOutputs[nn.data->layerOutputs.size() - 2],multiplier,weights);
 			}
 
 			//Adjust the hidden layer weights in reverse order starting with those just before the
 			//output layer.
-			for(int l = layerOutputs.size() - 2;l >= 0;l--)
+			for(int l = nn.data->layerOutputs.size() - 2;l >= 0;l--)
 			{
 				std::vector<std::vector<float>>& layer = nn.data->layers[l];
 				const std::vector<std::vector<float>>& nextLayer = nn.data->layers[l + 1];
-				const std::vector<float>& outputs = layerOutputs[l];
+				const std::vector<float>& outputs = nn.data->layerOutputs[l];
 
 				layerLittleDeltas[l].resize(layer.size());
 #pragma omp parallel for
@@ -165,22 +207,10 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 
 					std::vector<float>& weights = layer[y];
 					const float multiplier = correctionIncrement * littleDelta;
-					const unsigned int weightSizeMinusOne = weights.size() - 1;
 					if(l == 0)
-					{
-						for(unsigned int z = 0;z < weightSizeMinusOne;z++)
-						{
-							weights[z] += multiplier * data.first[z];
-						}
-					}
+						UpdateWeights(data.first,multiplier,weights);
 					else
-					{
-						for(unsigned int z = 0;z < weightSizeMinusOne;z++)
-						{
-							weights[z] += multiplier * layerOutputs[l - 1][z];
-						}
-					}
-					weights.back() += correctionIncrement * littleDelta;
+						UpdateWeights(nn.data->layerOutputs[l - 1],multiplier,weights);
 
 					layerLittleDeltas[l][y] = littleDelta;
 				}
@@ -211,7 +241,7 @@ unsigned char NeuralNetwork::Run(const std::vector<unsigned char>& inputData) co
 		return 0;
 
 	std::vector<std::vector<float>> layerOutputs;
-	RunNetwork(data->layers,inputData,layerOutputs);
+	RunNetworkTrained(data->layers,inputData,layerOutputs);
 
 	const std::vector<float>::const_iterator maxElementIter = std::max_element(layerOutputs.back().begin(),
 																			   layerOutputs.back().end());

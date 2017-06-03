@@ -20,6 +20,7 @@ struct NeuralNetworkData
 	std::vector<unsigned char> outputChoices;
 	std::vector<std::pair<std::vector<float>,unsigned char>> trainingData;
 	std::vector<std::vector<std::vector<float>>> layers;
+	std::vector<std::vector<float>> layerOutputs;
 
 	void Clear();
 	void InitializeWithTrainingData(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData);

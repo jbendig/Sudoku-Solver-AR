@@ -31,6 +31,28 @@ static void TrainingDataOutputChoices(const std::vector<std::pair<std::vector<fl
 	std::sort(outputChoices.begin(),outputChoices.end());
 }
 
+static void PrepareVector(std::vector<float>& vec)
+{
+	//Reserve a slot for the 1.0f term.
+	vec.push_back(1.0f);
+
+	//Pad vector so it aligns well for SIMD, GPU, etc.
+	while((vec.size() % 8) != 0)
+	{
+		vec.push_back(0.0f);
+	}
+}
+
+static void InitializeLayerOutputs(const std::vector<std::vector<std::vector<float>>>& layers,std::vector<std::vector<float>>& layerOutputs)
+{
+	layerOutputs.resize(layers.size());
+	for(unsigned int x = 0;x < layers.size();x++)
+	{
+		layerOutputs[x].resize(layers[x].size());
+		PrepareVector(layerOutputs[x]);
+	}
+}
+
 void NeuralNetworkData::Clear()
 {
 	inputSize = 0;
@@ -43,6 +65,10 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 {
 	Clear();
 
+	//Get original input size first because this is the size of input for the trained network. The
+	//input used while training is enlarged for a 1.0f term and to better fit SIMD/GPU processing.
+	inputSize = trainingData[0].first.size();
+
 	//Convert input data into a more efficient form using floats.
 	for(const auto& data : trainingData)
 	{
@@ -51,6 +77,8 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 		{
 			input.push_back(static_cast<float>(value));
 		}
+		PrepareVector(input);
+
 		this->trainingData.push_back({input,data.second});
 	}
 
@@ -59,9 +87,9 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 
 	//Setup NN layers. There needs to be a minimum of one hidden layer and one output layer but
 	//there can be as many hidden layers as necessary.
-	inputSize = trainingData[0].first.size();
 	layers.push_back(std::vector<std::vector<float>>(inputSize / 2)); //Hidden layer.
 	layers.push_back(std::vector<std::vector<float>>(outputSize)); //Output layer.
+	InitializeLayerOutputs(layers,layerOutputs);
 
 	//Randomize initial weights.
 	std::random_device randomDevice;
@@ -75,6 +103,7 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 			{
 				neuron.push_back(randomNumberGenerator() / static_cast<double>(std::mt19937::max()) - 0.5);
 			}
+			PrepareVector(neuron);
 		}
 
 		previousLayerSize = layer.size();
@@ -183,6 +212,7 @@ bool NeuralNetworkData::Load()
 	//Figure out the remaining parameters from the loaded data.
 	inputSize = trainingData[0].first.size();
 	TrainingDataOutputChoices(trainingData,outputChoices);
+	InitializeLayerOutputs(layers,layerOutputs);
 
 	return true;
 }
