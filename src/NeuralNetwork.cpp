@@ -160,18 +160,6 @@ static void RunNetworkTrained(const std::vector<std::vector<AlignedVector>>& lay
 	}
 }
 
-static void ExpectedOutput(const std::vector<unsigned char> outputChoices,const unsigned char value,AlignedVector& expectedOutput)
-{
-	expectedOutput.resize(outputChoices.size());
-	for(unsigned int x = 0;x < outputChoices.size();x++)
-	{
-		if(outputChoices[x] == value)
-			expectedOutput[x] = 1.0f;
-		else
-			expectedOutput[x] = 0.0f;
-	}
-}
-
 NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData)
 {
 	if(trainingData.empty())

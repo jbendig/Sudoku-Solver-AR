@@ -19,6 +19,8 @@ using Neuron = AlignedVector;
 using Layer = std::vector<Neuron>;
 using Layers = std::vector<Layer>;
 
+void ExpectedOutput(const std::vector<unsigned char>& outputChoices,const unsigned char value,AlignedVector& expectedOutput);
+
 struct NeuralNetworkData
 {
 	unsigned int inputSize;

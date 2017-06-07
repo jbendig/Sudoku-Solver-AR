@@ -69,6 +69,18 @@ static T ReadValue(std::ifstream& stream)
 	return value;
 }
 
+void ExpectedOutput(const std::vector<unsigned char>& outputChoices,const unsigned char value,AlignedVector& expectedOutput)
+{
+	expectedOutput.resize(outputChoices.size());
+	for(unsigned int x = 0;x < outputChoices.size();x++)
+	{
+		if(outputChoices[x] == value)
+			expectedOutput[x] = 1.0f;
+		else
+			expectedOutput[x] = 0.0f;
+	}
+}
+
 void NeuralNetworkData::Clear()
 {
 	inputSize = 0;

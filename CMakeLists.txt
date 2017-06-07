@@ -6,6 +6,7 @@ IF(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 	SET(LINUX True)
 	SET(CMAKE_CXX_FLAGS_RELEASE " -O2 -s")
 	SET(USE_AVX true CACHE BOOL "Use AVX functions")
+	SET(USE_CUDA true CACHE BOOL "Build CUDA neural network trainer")
 ELSEIF(WIN32)
 	SET(GLFW_INCLUDE_DIR "" CACHE PATH "GLFW include directory")
 	SET(GLFW_LIBRARY_DIR "" CACHE PATH "GLFW library dictory")
@@ -68,3 +69,11 @@ IF(LINUX)
 	SET_TARGET_PROPERTIES(sudoku_solver PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -std=c++1z")
 ENDIF()
 
+IF(USE_CUDA)
+	FIND_PACKAGE(CUDA QUIET REQUIRED)
+	SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -std=c++11 -O3 -gencode arch=compute_30,code=sm_30 -lineinfo) # Tuned for GTX 6xx.
+	CUDA_ADD_EXECUTABLE(train_neural_network
+		src/train_neural_network.cu
+		src/NeuralNetworkData.cpp
+	)
+ENDIF()
