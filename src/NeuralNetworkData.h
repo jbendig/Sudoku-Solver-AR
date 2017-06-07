@@ -30,8 +30,13 @@ struct NeuralNetworkData
 	void Clear();
 	void InitializeWithTrainingData(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData);
 
-	void Save();
-	bool Load();
+	//Save/load using an inefficient text format for debugging.
+	void SaveAsText();
+	bool LoadFromText();
+
+	//Save/load using an inefficient binary format.
+	void SaveAsBinary();
+	bool LoadFromBinary();
 };
 
 #endif

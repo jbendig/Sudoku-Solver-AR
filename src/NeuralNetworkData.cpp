@@ -15,9 +15,11 @@
 #include <iostream>
 #include <random>
 #include <set>
+#include <cassert>
 
 
-static const char* FILE_PATH = "training.dat";
+static const char* TEXT_FILE_PATH = "training.dat";
+static const char* BINARY_FILE_PATH = "training.bin.dat";
 
 static void TrainingDataOutputChoices(const std::vector<std::pair<AlignedVector,unsigned char>>& trainingData,std::vector<unsigned char>& outputChoices)
 {
@@ -51,6 +53,20 @@ static void InitializeLayerOutputs(const std::vector<std::vector<AlignedVector>>
 		layerOutputs[x].resize(layers[x].size());
 		PrepareVector(layerOutputs[x]);
 	}
+}
+
+template <class T>
+static void WriteValue(std::ofstream& stream,const T value)
+{
+	stream.write(reinterpret_cast<const char*>(&value),sizeof(value));
+}
+
+template <class T>
+static T ReadValue(std::ifstream& stream)
+{
+	T value;
+	stream.read(reinterpret_cast<char*>(&value),sizeof(value));
+	return value;
 }
 
 void NeuralNetworkData::Clear()
@@ -110,9 +126,9 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 	}
 }
 
-void NeuralNetworkData::Save()
+void NeuralNetworkData::SaveAsText()
 {
-	std::ofstream outFile(FILE_PATH);
+	std::ofstream outFile(TEXT_FILE_PATH);
 	if(!outFile)
 	{
 		std::cerr << "Could not save neural network training." << std::endl;
@@ -148,13 +164,13 @@ void NeuralNetworkData::Save()
 	}
 }
 
-bool NeuralNetworkData::Load()
+bool NeuralNetworkData::LoadFromText()
 {
 	//WARNING: This function makes no attempt to validate that the loaded data is safe.
 
 	Clear();
 
-	std::ifstream inFile(FILE_PATH);
+	std::ifstream inFile(TEXT_FILE_PATH);
 	if(!inFile)
 		return false;
 
@@ -212,6 +228,100 @@ bool NeuralNetworkData::Load()
 	//Figure out the remaining parameters from the loaded data.
 	inputSize = trainingData[0].first.size();
 	TrainingDataOutputChoices(trainingData,outputChoices);
+	InitializeLayerOutputs(layers,layerOutputs);
+
+	return true;
+}
+
+void NeuralNetworkData::SaveAsBinary()
+{
+	std::ofstream outFile(BINARY_FILE_PATH,std::ios::binary);
+	if(!outFile)
+	{
+		std::cerr << "Could not save neural network training." << std::endl;
+		return;
+	}
+
+	//Save training data.
+	WriteValue<unsigned int>(outFile,trainingData.size());
+	for(const auto& data : trainingData)
+	{
+		WriteValue<unsigned int>(outFile,data.second); //Expected output.
+		WriteValue<unsigned int>(outFile,data.first.size()); //Input entry count.
+		outFile.write(reinterpret_cast<const char*>(&data.first[0]),data.first.size() * sizeof(float));
+	}
+
+	//Save testing data.
+	WriteValue<unsigned int>(outFile,0); //Not yet supported. Always 0.
+
+	//Save layer weights.
+	WriteValue<unsigned int>(outFile,layers.size());
+	for(const auto& layer : layers)
+	{
+		WriteValue<unsigned int>(outFile,layer.size());
+		for(const auto& neuron : layer)
+		{
+			WriteValue<unsigned int>(outFile,neuron.size());
+			outFile.write(reinterpret_cast<const char*>(&neuron[0]),neuron.size() * sizeof(float));
+		}
+	}
+
+	//Save output choices.
+	WriteValue<unsigned int>(outFile,outputChoices.size());
+	outFile.write(reinterpret_cast<const char*>(&outputChoices[0]),outputChoices.size());
+}
+
+bool NeuralNetworkData::LoadFromBinary()
+{
+	//WARNING: This function makes no attempt to validate that the loaded data is safe.
+
+	Clear();
+
+	std::ifstream inFile(BINARY_FILE_PATH,std::ios::binary);
+	if(!inFile)
+		return false;
+
+	//Load training data.
+	const unsigned int trainingDataSize = ReadValue<unsigned int>(inFile);
+	for(unsigned int x = 0;x < trainingDataSize;x++)
+	{
+		const unsigned int expectedValue = ReadValue<unsigned int>(inFile);
+		const unsigned int inputValueSize = ReadValue<unsigned int>(inFile);
+		AlignedVector inputValues(inputValueSize,0.0f);
+		inFile.read(reinterpret_cast<char*>(&inputValues[0]),inputValueSize * sizeof(float));
+
+		trainingData.push_back(std::make_pair(inputValues,static_cast<unsigned char>(expectedValue)));
+	}
+
+	//Load testing data.
+	const unsigned int testingDataSize = ReadValue<unsigned int>(inFile);
+	assert(testingDataSize == 0);
+
+	//Load layer weights.
+	const unsigned int layersSize = ReadValue<unsigned int>(inFile);
+	for(unsigned int x = 0;x < layersSize;x++)
+	{
+		const unsigned int layerSize = ReadValue<unsigned int>(inFile);
+		Layer layer;
+		for(unsigned int y = 0;y < layerSize;y++)
+		{
+			const unsigned int neuronSize = ReadValue<unsigned int>(inFile);
+			Neuron neuron(neuronSize,0.0f);
+			inFile.read(reinterpret_cast<char*>(&neuron[0]),neuronSize * sizeof(float));
+
+			layer.push_back(neuron);
+		}
+
+		layers.push_back(layer);
+	}
+
+	//Load output choices.
+	const unsigned int outputChoicesSize = ReadValue<unsigned int>(inFile);
+	outputChoices.resize(outputChoicesSize);
+	inFile.read(reinterpret_cast<char*>(&outputChoices[0]),outputChoicesSize);
+
+	//Figure out the remaining parameters from the loaded data.
+	inputSize = trainingData[0].first.size();
 	InitializeLayerOutputs(layers,layerOutputs);
 
 	return true;
