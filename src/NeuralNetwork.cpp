@@ -180,7 +180,7 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 	//Try to load previous training session and resume from it if possible. Otherwise, start a new
 	//session.
 	NeuralNetwork nn;
-	if(!nn.data->LoadFromText())
+	if(!nn.data->LoadFromBinary())
 		nn.data->InitializeWithTrainingData(trainingData);
 
 	//Skip training if it was already completed.
@@ -256,7 +256,7 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 		//Save every once in a while since processing can take hours.
 		if(totalError < 1.0f || (x != 0 && (x % 25) == 0))
 		{
-			nn.data->SaveAsText();
+			nn.data->SaveAsBinary();
 			deltaTimer.Update();
 			std::cout << "Took " << deltaTimer.Delta() << " sec(s) to save" << std::endl;
 		}
