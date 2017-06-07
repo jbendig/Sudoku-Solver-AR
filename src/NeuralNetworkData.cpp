@@ -19,7 +19,7 @@
 
 static const char* FILE_PATH = "training.dat";
 
-static void TrainingDataOutputChoices(const std::vector<std::pair<std::vector<float>,unsigned char>>& trainingData,std::vector<unsigned char>& outputChoices)
+static void TrainingDataOutputChoices(const std::vector<std::pair<AlignedVector,unsigned char>>& trainingData,std::vector<unsigned char>& outputChoices)
 {
 	std::set<unsigned char> outputChoiceSet;
 	for(const auto& data : trainingData)
@@ -31,7 +31,7 @@ static void TrainingDataOutputChoices(const std::vector<std::pair<std::vector<fl
 	std::sort(outputChoices.begin(),outputChoices.end());
 }
 
-static void PrepareVector(std::vector<float>& vec)
+static void PrepareVector(AlignedVector& vec)
 {
 	//Reserve a slot for the 1.0f term.
 	vec.push_back(1.0f);
@@ -43,7 +43,7 @@ static void PrepareVector(std::vector<float>& vec)
 	}
 }
 
-static void InitializeLayerOutputs(const std::vector<std::vector<std::vector<float>>>& layers,std::vector<std::vector<float>>& layerOutputs)
+static void InitializeLayerOutputs(const std::vector<std::vector<AlignedVector>>& layers,std::vector<AlignedVector>& layerOutputs)
 {
 	layerOutputs.resize(layers.size());
 	for(unsigned int x = 0;x < layers.size();x++)
@@ -72,7 +72,7 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 	//Convert input data into a more efficient form using floats.
 	for(const auto& data : trainingData)
 	{
-		std::vector<float> input;
+		AlignedVector input;
 		for(const unsigned char value : data.first)
 		{
 			input.push_back(static_cast<float>(value));
@@ -87,17 +87,17 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 
 	//Setup NN layers. There needs to be a minimum of one hidden layer and one output layer but
 	//there can be as many hidden layers as necessary.
-	layers.push_back(std::vector<std::vector<float>>(inputSize / 2)); //Hidden layer.
-	layers.push_back(std::vector<std::vector<float>>(outputSize)); //Output layer.
+	layers.push_back(std::vector<AlignedVector>(inputSize / 2)); //Hidden layer.
+	layers.push_back(std::vector<AlignedVector>(outputSize)); //Output layer.
 	InitializeLayerOutputs(layers,layerOutputs);
 
 	//Randomize initial weights.
 	std::random_device randomDevice;
 	std::mt19937 randomNumberGenerator(randomDevice());
 	unsigned int previousLayerSize = inputSize;
-	for(std::vector<std::vector<float>>& layer : layers)
+	for(std::vector<AlignedVector>& layer : layers)
 	{
-		for(std::vector<float>& neuron : layer)
+		for(AlignedVector& neuron : layer)
 		{
 			while(neuron.size() <= previousLayerSize)
 			{
@@ -136,7 +136,7 @@ void NeuralNetworkData::Save()
 	for(const auto& layer : layers)
 	{
 		outFile << layer.size() << " ";
-		for(const std::vector<float>& neuron : layer)
+		for(const AlignedVector& neuron : layer)
 		{
 			outFile << neuron.size() << " ";
 			for(const float weight : neuron)
@@ -168,7 +168,7 @@ bool NeuralNetworkData::Load()
 		inFile >> expectedValue;
 		unsigned int inputValueSize = 0;
 		inFile >> inputValueSize;
-		std::vector<float> inputValues;
+		AlignedVector inputValues;
 		for(unsigned int y = 0;y < inputValueSize;y++)
 		{
 			float value = 0;
@@ -188,13 +188,13 @@ bool NeuralNetworkData::Load()
 	{
 		unsigned int layerSize = 0;
 		inFile >> layerSize;
-		std::vector<std::vector<float>> layer;
+		std::vector<AlignedVector> layer;
 		std::cout << "Layer " << x << " has " << layerSize << " neurons" << std::endl;
 		for(unsigned int y = 0;y < layerSize;y++)
 		{
 			unsigned int neuronSize = 0;
 			inFile >> neuronSize;
-			std::vector<float> neuron;
+			AlignedVector neuron;
 			for(unsigned int z = 0;z < neuronSize;z++)
 			{
 				float weight = 0.0f;
