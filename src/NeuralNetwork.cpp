@@ -259,8 +259,12 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 
 unsigned char NeuralNetwork::Run(const std::vector<unsigned char>& inputData) const
 {
-	if(inputData.size() != data->inputSize)
-		return 0;
+	const unsigned int paddedInputSize = inputData.size() + 1 + 8 - (inputData.size() + 1) % 8;
+	if(paddedInputSize != data->inputSize)
+	{
+		std::cerr << "NeuralNetwork::Run(): Got unexpected input data size." << std::endl;
+		std::abort();
+	}
 
 	std::vector<AlignedVector> layerOutputs;
 	RunNetworkTrained(data->layers,inputData,layerOutputs);
