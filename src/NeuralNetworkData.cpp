@@ -95,7 +95,7 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 
 	//Get original input size first because this is the size of input for the trained network. The
 	//input used while training is enlarged for a 1.0f term and to better fit SIMD/GPU processing.
-	inputSize = trainingData[0].first.size();
+	const unsigned int originalInputSize = trainingData[0].first.size();
 
 	//Convert input data into a more efficient form using floats.
 	for(const auto& data : trainingData)
@@ -136,6 +136,8 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 
 		previousLayerSize = layer.size();
 	}
+
+	inputSize = this->trainingData[0].first.size();
 }
 
 void NeuralNetworkData::SaveAsText()
