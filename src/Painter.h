@@ -24,13 +24,15 @@ class Painter
 		Painter();
 
 		void DrawImage(const float x,float y,float width,float height,const Image& image);
-		void DrawImage(const std::vector<Point>& targetPoints,const Image& image);
+		void DrawImage(const Point topLeft,const Point topRight,const Point bottomLeft,const Point bottomRight,const Image& image);
 		void DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue);
 
-		//These draw to an alternative framebuffer.
-		void ExtractImage(const Image& srcImage,const std::vector<Point>& srcPoints,const float srcPointScaleX,const float srcPointScaleY,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight);
+		void ExtractImage(const Image& srcImage,const Point topLeft,const Point topRight,const Point bottomLeft,const Point bottomRight,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight);
 		void ScaleImage(const Image& srcImage,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight);
-		void DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,const float noiseDelta,Image& dstImage);
+
+		void DrawPuzzleGrid(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,Image& dstImage);
+		void DrawNoise(const unsigned int width,const unsigned int height,const float noiseDelta);
+		void DrawWarpedAndUnwarpedPuzzle(const Image& srcImage,const unsigned int renderBufferSize,const float perspectiveCornerRandomRadius,const float noiseDelta,Image& dstImage,const unsigned int dstImageSize);
 	private:
 		ShaderProgram imageProgram;
 		ShaderProgram lineProgram;

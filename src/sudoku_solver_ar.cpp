@@ -31,8 +31,10 @@
 #include "Painter.h"
 #include "PuzzleFinder.h"
 
-static constexpr unsigned int PUZZLE_IMAGE_WIDTH = 600;
+static constexpr unsigned int PUZZLE_IMAGE_WIDTH = 144;
 static constexpr unsigned int PUZZLE_IMAGE_HEIGHT = PUZZLE_IMAGE_WIDTH;
+static constexpr unsigned int PUZZLE_DISPLAY_WIDTH = 600;
+static constexpr unsigned int PUZZLE_DISPLAY_HEIGHT = PUZZLE_DISPLAY_WIDTH;
 
 static bool drawLines = false;
 static bool drawLineClusters = false;
@@ -304,7 +306,18 @@ static void RenderPuzzle(Painter& painter,const std::string& font,const std::vec
 	FT_Done_FreeType(ftLibrary);
 
 	Image srcImage = image;
-	painter.DrawPuzzleOverlay(srcImage,4.0f,1.0f,3.0f,0.15f,image);
+	painter.DrawPuzzleGrid(srcImage,
+						   4.0f, //Border line width (px).
+						   1.0f, //Grid minor line width (px).
+						   3.0f, //Grid major line width (px).
+						   image);
+	srcImage = image;
+	painter.DrawWarpedAndUnwarpedPuzzle(srcImage,
+										1024, //Framebuffer width and height.
+										200.0f, //Perspective warp corner random radius.
+										0.15f, //Noise delta.
+										image, //Destination image.
+										144); //Destination image with and height.
 }
 
 static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
@@ -346,6 +359,53 @@ static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
 	}
 }
 
+static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGenerator,Image& puzzleImage,std::vector<unsigned char>& digits)
+{
+	//Select a random font.
+	const std::vector<std::string> fonts = {
+		"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",
+		"/usr/share/fonts/oxygen/OxygenMono-Regular.ttf",
+		"/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+		"/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
+		"/usr/share/fonts/google-droid/DroidSans.ttf",
+		"/usr/share/fonts/dejavu/DejaVuSans.ttf",
+		"/usr/share/fonts/dejavu/DejaVuSerif.ttf",
+	};
+
+	std::uniform_int_distribution<> fontDist(0,fonts.size() - 1);
+	const std::string& font = fonts[fontDist(randomNumberGenerator)];
+
+	//Select a random digit for each box.
+	std::uniform_int_distribution<> digitDist(0,9);
+	digits.clear();
+	for(unsigned int x = 0;x < 81;x++)
+	{
+		digits.push_back(digitDist(randomNumberGenerator));
+	}
+
+	//Render the puzzle with a border, grid, and extra noise.
+	RenderPuzzle(painter,font,digits,puzzleImage);
+
+	//Preprocess the puzzle as a binary image to improve training speed and accuracy.
+	for(unsigned int x = 0;x < puzzleImage.width * puzzleImage.height;x++)
+	{
+		const unsigned int index = x * 3;
+
+		if(puzzleImage.data[index] > 128)
+		{
+			puzzleImage.data[index + 0] = 1;
+			puzzleImage.data[index + 1] = 1;
+			puzzleImage.data[index + 2] = 1;
+		}
+		else
+		{
+			puzzleImage.data[index + 0] = 0;
+			puzzleImage.data[index + 1] = 0;
+			puzzleImage.data[index + 2] = 0;
+		}
+	}
+}
+
 static void PrepareOCRNeuralNetwork(Painter& painter)
 {
 	auto ImageToData = [](const Image& image)
@@ -360,46 +420,34 @@ static void PrepareOCRNeuralNetwork(Painter& painter)
 		return data;
 	};
 
+	std::random_device randomDevice;
+	std::mt19937 randomNumberGenerator(randomDevice());
+
 	//Render a bunch of random puzzles using the following fonts. Each puzzle is processed with
 	//noise to help improve training results.
 	std::vector<std::pair<std::vector<unsigned char>,unsigned char>> trainingData;
-	std::vector<std::string> fonts = {
-		"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",
-		"/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-		"/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
-		"/usr/share/fonts/google-droid/DroidSans.ttf",
-	};
-	for(const std::string& font : fonts)
+	for(unsigned int x = 0;x < 1000;x++)
 	{
-		for(unsigned int x = 0;x < 10;x++)
-		{
-			std::vector<unsigned char> digits;
-			for(unsigned int x = 0;x < 81;x++)
-			{
-				digits.push_back(rand() % 10);
-			}
+		Image puzzleImage;
+		std::vector<unsigned char> digits;
+		GenerateRandomPuzzle(painter,randomNumberGenerator,puzzleImage,digits);
 
-			Image puzzleFrame;
-			RenderPuzzle(painter,font,digits,puzzleFrame);
-			//TODO: Perform perspective warp and then de-warp to add more noise.
-			std::vector<Image> puzzleTiles;
-			ExtractPuzzleTiles(puzzleFrame,puzzleTiles);
-			for(unsigned int x = 0;x < puzzleTiles.size();x++)
-			{
-				trainingData.push_back({ImageToData(puzzleTiles[x]),digits[x]});
-			}
+		std::vector<Image> puzzleTiles;
+		ExtractPuzzleTiles(puzzleImage,puzzleTiles);
+		for(unsigned int x = 0;x < puzzleTiles.size();x++)
+		{
+			trainingData.push_back({ImageToData(puzzleTiles[x]),digits[x]});
 		}
 	}
 
-	//Randomize puzzles so NN doesn't over train to a specific font.
-	std::random_device randomDevice;
-	std::mt19937 randomNumberGenerator(randomDevice());
+	//Randomize puzzle tiles so NN doesn't over train to a specific font.
 	std::shuffle(trainingData.begin(),trainingData.end(),randomNumberGenerator);
 
 	//Train neural network. It will likely take many hours.
 	NeuralNetwork nn = NeuralNetwork::Train(trainingData);
 
 	//Measure how accurate the NN is.
+	//TODO: Should generate a new test set.
 	unsigned int correct = 0;
 	for(const auto& td : trainingData)
 	{
@@ -441,7 +489,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,0);
 	glfwWindowHint(GLFW_RESIZABLE,GL_FALSE);
 
-	GLFWwindow* window = glfwCreateWindow(800 + PUZZLE_IMAGE_WIDTH,600,"Sudoku Solver AR",nullptr,nullptr);
+	GLFWwindow* window = glfwCreateWindow(800 + PUZZLE_DISPLAY_WIDTH,600,"Sudoku Solver AR",nullptr,nullptr);
 	assert(window != nullptr);
 	glfwMakeContextCurrent(window);
 	glfwSetKeyCallback(window,OnKey);
@@ -480,7 +528,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 		unsigned int drawImageY = 0;
 		unsigned int drawImageWidth = 0;
 		unsigned int drawImageHeight = 0;
-		FitImage(windowWidth - PUZZLE_IMAGE_WIDTH,windowHeight,frame,drawImageX,drawImageY,drawImageWidth,drawImageHeight);
+		FitImage(windowWidth - PUZZLE_DISPLAY_WIDTH,windowHeight,frame,drawImageX,drawImageY,drawImageWidth,drawImageHeight);
 
 		if(frame.width * frame.height > drawImageWidth * drawImageHeight)
 		{
@@ -500,12 +548,22 @@ int __stdcall WinMain(void*,void*,void*,int)
 
 		std::vector<Point> puzzlePoints;
 		if(puzzleFinder.Find(drawImageWidth,drawImageHeight,houghTransformFrame,puzzlePoints))
-			painter.ExtractImage(*inputFrame,puzzlePoints,1.0f / drawImageWidth,1.0f / drawImageHeight,puzzleFrame,PUZZLE_IMAGE_WIDTH,PUZZLE_IMAGE_HEIGHT);
+		{
+			const Point scalerPoint = {1.0f / drawImageWidth,1.0f / drawImageHeight};
+			painter.ExtractImage(*inputFrame,
+								 puzzlePoints[0] * scalerPoint,
+								 puzzlePoints[1] * scalerPoint,
+								 puzzlePoints[2] * scalerPoint,
+								 puzzlePoints[3] * scalerPoint,
+								 puzzleFrame,
+								 PUZZLE_IMAGE_WIDTH,
+								 PUZZLE_IMAGE_HEIGHT);
+		}
 
 		//Draw frame and extracted puzzle if available.
 		glViewport(0,0,windowWidth,windowHeight);
 		painter.DrawImage(drawImageX,drawImageY,drawImageWidth,drawImageHeight,mergedFrame);
-		painter.DrawImage(800,0,PUZZLE_IMAGE_WIDTH,PUZZLE_IMAGE_HEIGHT,puzzleFrame);
+		painter.DrawImage(800,0,PUZZLE_DISPLAY_WIDTH,PUZZLE_DISPLAY_HEIGHT,puzzleFrame);
 
 		//Draw answer composite over puzzle if available.
 		if(!puzzlePoints.empty())
@@ -521,7 +579,8 @@ int __stdcall WinMain(void*,void*,void*,int)
 				point.x += drawImageX;
 				point.y += drawImageY;
 			}
-			painter.DrawImage(puzzlePoints,answerImage);
+			assert(puzzlePoints.size() == 4);
+			painter.DrawImage(puzzlePoints[0],puzzlePoints[1],puzzlePoints[2],puzzlePoints[3],answerImage);
 			glDisable(GL_BLEND);
 		}
 

@@ -288,15 +288,15 @@ bool PuzzleFinder::Find(const unsigned int targetWidth,const unsigned int target
 	//Only finding one puzzle at a time is supported.
 	const auto puzzle = puzzleLines[0];
 
-	//Find where the puzzle lines intersect to determine where the puzzle is. More than the corners
-	//are computed to help compensate for the perspective distortion.
+	//Find where the puzzle lines intersect to determine where the puzzle is. Only the outer
+	//corners are needed.
 	const auto& puzzleLines1 = puzzle.first;
 	const auto& puzzleLines2 = puzzle.second;
 
 	puzzlePoints.clear();
-	for(unsigned int y = 0;y < 4;y++)
+	for(unsigned int y = 0;y < 4;y += 3)
 	{
-		for(unsigned int x = 0;x < 4;x++)
+		for(unsigned int x = 0;x < 4;x += 3)
 		{
 			float intersectionX = 0.0f;
 			float intersectionY = 0.0f;

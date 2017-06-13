@@ -17,6 +17,8 @@
 #elif defined _WIN32
 #include <GL/glew.h>
 #endif
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/random.hpp>
 #include "Image.h"
 
 
@@ -56,6 +58,112 @@ class Viewport
 
 };
 
+static glm::mat3 BuildPerspectiveMatrix(const glm::vec2 p0,const glm::vec2 p1,const glm::vec2 p2,const glm::vec2 p3)
+{
+	//See Digital Image Warping page 55.
+
+	const glm::vec2 d1 = p1 - p2;
+	const glm::vec2 d2 = p3 - p2;
+	const glm::vec2 d3 = p0 - p1 + p2 - p3;
+
+	const float a13 = glm::determinant(glm::mat2(d3.x,d2.x,d3.y,d2.y)) / glm::determinant(glm::mat2(d1.x,d2.x,d1.y,d2.y));
+	const float a23 = glm::determinant(glm::mat2(d1.x,d3.x,d1.y,d3.y)) / glm::determinant(glm::mat2(d1.x,d2.x,d1.y,d2.y));
+	const float a11 = p1.x - p0.x + a13 * p1.x;
+	const float a21 = p3.x - p0.x + a23 * p3.x;
+	const float a31 = p0.x;
+	const float a12 = p1.y - p0.y + a13 * p1.y;
+	const float a22 = p3.y - p0.y + a23 * p3.y;
+	const float a32 = p0.y;
+	const float a33 = 1.0f;
+
+	return glm::mat3(a11,a21,a31,a12,a22,a32,a13,a23,a33);
+}
+
+static void BuildGrid(const glm::mat3& matrix,const unsigned int gridSize,auto addPointFunc)
+{
+	if(gridSize == 0)
+		return;
+
+	const float dx = 1.0f / static_cast<float>(gridSize - 1);
+	for(unsigned int y = 0;y < gridSize;y++)
+	{
+		for(unsigned int x = 0;x < gridSize;x++)
+		{
+			const float u = static_cast<float>(x) * dx;
+			const float v = static_cast<float>(y) * dx;
+			glm::vec3 p = glm::vec3(u,v,1.0f) * matrix;
+			if(p[2] != 0.0f)
+				p /= p[2];
+
+			addPointFunc(u,v,p[0],p[1]);
+		}
+	}
+}
+
+static void BuildGridIndices(const unsigned int gridSize,std::vector<GLuint>& indices)
+{
+	indices.clear();
+
+	for(unsigned int y = 0;y < (gridSize - 1);y++)
+	{
+		for(unsigned int x = 0;x < (gridSize - 1);x++)
+		{
+			const unsigned int topLeft = (y * gridSize) + x;
+			const unsigned int topRight = topLeft + 1;
+			const unsigned int bottomLeft = topLeft + gridSize;
+			const unsigned int bottomRight = bottomLeft + 1;
+
+			indices.push_back(topLeft);
+			indices.push_back(topRight);
+			indices.push_back(bottomRight);
+			indices.push_back(bottomRight);
+			indices.push_back(bottomLeft);
+			indices.push_back(topLeft);
+		}
+	}
+}
+
+static void DrawImagePrivate(const ShaderProgram& imageProgram,const Image& srcImage,const GLfloat* vertices,const GLuint vertexCount,const GLuint* indices,const GLuint indexCount)
+{
+	if(srcImage.data.empty())
+		return;
+
+	imageProgram.Use();
+
+	GLuint texture;
+	glGenTextures(1,&texture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D,texture);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glUniform1i(imageProgram.Uniform("inputTexture"),0);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,srcImage.width,srcImage.height,0,GL_RGB,GL_UNSIGNED_BYTE,&srcImage.data[0]);
+
+	GLuint vao;
+	glGenVertexArrays(1,&vao);
+	glBindVertexArray(vao);
+
+	GLuint vbo;
+	glGenBuffers(1,&vbo);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo);
+	glBufferData(GL_ARRAY_BUFFER,vertexCount * 5 * sizeof(GLfloat),vertices,GL_STATIC_DRAW);
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
+	glEnableVertexAttribArray(1);
+
+	glDrawElements(GL_TRIANGLES,indexCount,GL_UNSIGNED_INT,indices);
+
+	glBindVertexArray(0);
+
+	glDeleteBuffers(1,&vbo);
+	glDeleteVertexArrays(1,&vao);
+	glDeleteTextures(1,&texture);
+	glUseProgram(0);
+}
+
 Painter::Painter()
 	: imageProgram(ShaderProgram::FromFile("image.vert","image.frag").value()),
 	  lineProgram(ShaderProgram::FromFile("line.vert","line.frag").value())
@@ -64,11 +172,6 @@ Painter::Painter()
 
 void Painter::DrawImage(const float x,float y,float width,float height,const Image& image)
 {
-	if(image.data.empty())
-		return;
-
-	imageProgram.Use();
-
 	float windowWidth = 0.0f;
 	float windowHeight = 0.0f;
 	Viewport::Get(windowWidth,windowHeight);
@@ -98,121 +201,33 @@ void Painter::DrawImage(const float x,float y,float width,float height,const Ima
 		2,3,0,
 	};
 
-	GLuint texture;
-	glGenTextures(1,&texture);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D,texture);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-	glUniform1i(imageProgram.Uniform("inputTexture"),0);
-	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,image.width,image.height,0,GL_RGB,GL_UNSIGNED_BYTE,&image.data[0]);
-
-	GLuint vao;
-	glGenVertexArrays(1,&vao);
-	glBindVertexArray(vao);
-
-	GLuint vbo;
-	glGenBuffers(1,&vbo);
-	glBindBuffer(GL_ARRAY_BUFFER,vbo);
-	glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
-	glEnableVertexAttribArray(1);
-
-	glDrawElements(GL_TRIANGLES,6,GL_UNSIGNED_INT,indices);
-
-	glBindVertexArray(0);
-
-	glDeleteBuffers(1,&vbo);
-	glDeleteVertexArrays(1,&vao);
-	glDeleteTextures(1,&texture);
-	glUseProgram(0);
+	DrawImagePrivate(imageProgram,image,vertices,4,indices,6);
 }
 
-void Painter::DrawImage(const std::vector<Point>& targetPoints,const Image& image)
+void Painter::DrawImage(const Point topLeft,const Point topRight,const Point bottomLeft,const Point bottomRight,const Image& image)
 {
-	if(image.data.empty())
-		return;
-	if(targetPoints.size() != 16)
-		return;
-
-	imageProgram.Use();
-
 	float windowWidth = 0.0f;
 	float windowHeight = 0.0f;
 	Viewport::Get(windowWidth,windowHeight);
 
-	std::vector<GLfloat> vertices;
-	for(unsigned int y = 0; y < 4;y++)
-	{
-		for(unsigned int x = 0;x < 4;x++)
-		{
-			const unsigned int targetPointsIndex = (y * 4) + x;
-			vertices.push_back((targetPoints[targetPointsIndex].x / windowWidth) * 2.0f - 1.0f); //X
-			vertices.push_back(1.0f - (targetPoints[targetPointsIndex].y / windowHeight) * 2.0f); //Y
-			vertices.push_back(0.0f); //Z
+	glm::mat3 matrix = BuildPerspectiveMatrix(glm::vec2(topLeft.x,    -topLeft.y)     * 2.0f / glm::vec2(windowWidth,windowHeight) + glm::vec2(-1.0f,1.0f),
+											  glm::vec2(topRight.x,   -topRight.y)    * 2.0f / glm::vec2(windowWidth,windowHeight) + glm::vec2(-1.0f,1.0f),
+											  glm::vec2(bottomRight.x,-bottomRight.y) * 2.0f / glm::vec2(windowWidth,windowHeight) + glm::vec2(-1.0f,1.0f),
+											  glm::vec2(bottomLeft.x, -bottomLeft.y)  * 2.0f / glm::vec2(windowWidth,windowHeight) + glm::vec2(-1.0f,1.0f));
+	const unsigned int GRID_SIZE = 18;
+	std::vector<float> vertices;
+	BuildGrid(matrix,GRID_SIZE,[&vertices](const float u,const float v,const float x,const float y) {
+		vertices.push_back(x);
+		vertices.push_back(y);
+		vertices.push_back(0.0f);
+		vertices.push_back(u);
+		vertices.push_back(v);
+	});
 
-			vertices.push_back(x * 1.0f / 3.0f); //U
-			vertices.push_back(y * 1.0f / 3.0f); //V
-		}
-	}
+	std::vector<GLuint> indices;
+	BuildGridIndices(GRID_SIZE,indices);
 
-	const GLuint indices[] = {
-		0,1,5,
-		0,5,4,
-		1,2,6,
-		1,6,5,
-		2,3,7,
-		2,7,6,
-		4,5,9,
-		4,9,8,
-		5,6,10,
-		5,10,9,
-		6,7,11,
-		6,11,10,
-		8,9,13,
-		8,13,12,
-		9,10,14,
-		9,14,13,
-		10,11,15,
-		10,15,14,
-	};
-
-	GLuint texture;
-	glGenTextures(1,&texture);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D,texture);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-	glUniform1i(imageProgram.Uniform("inputTexture"),0);
-	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,image.width,image.height,0,GL_RGB,GL_UNSIGNED_BYTE,&image.data[0]);
-
-	GLuint vao;
-	glGenVertexArrays(1,&vao);
-	glBindVertexArray(vao);
-
-	GLuint vbo;
-	glGenBuffers(1,&vbo);
-	glBindBuffer(GL_ARRAY_BUFFER,vbo);
-	glBufferData(GL_ARRAY_BUFFER,vertices.size() * sizeof(float),&vertices[0],GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
-	glEnableVertexAttribArray(1);
-
-	glDrawElements(GL_TRIANGLES,18*3,GL_UNSIGNED_INT,indices);
-
-	glBindVertexArray(0);
-
-	glDeleteBuffers(1,&vbo);
-	glDeleteVertexArrays(1,&vao);
-	glDeleteTextures(1,&texture);
-	glUseProgram(0);
+	DrawImagePrivate(imageProgram,image,vertices.data(),vertices.size() / 5,indices.data(),indices.size());
 }
 
 void Painter::DrawLine(float x1,float y1,float x2,float y2,const unsigned char red,const unsigned char green,const unsigned char blue)
@@ -257,54 +272,24 @@ void Painter::DrawLine(float x1,float y1,float x2,float y2,const unsigned char r
 	glUseProgram(0);
 }
 
-void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPoints,const float srcPointScaleX,const float srcPointScaleY,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight)
+void Painter::ExtractImage(const Image& srcImage,const Point topLeft,const Point topRight,const Point bottomLeft,const Point bottomRight,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight)
 {
-	//srcPoints should be 4x4 points that are used for generating where srcImage will be sampled.
-	//The extra points are used to reduce the bilinear artifacts when performing a perspective warp.
-	//See Digital Image Warping section 7.2.3.
+	glm::mat3 matrix = BuildPerspectiveMatrix(glm::vec2(topLeft.x,topLeft.y),
+											  glm::vec2(topRight.x,topRight.y),
+											  glm::vec2(bottomRight.x,bottomRight.y),
+											  glm::vec2(bottomLeft.x,bottomLeft.y));
+	const unsigned int GRID_SIZE = 18;
+	std::vector<float> vertices;
+	BuildGrid(matrix,GRID_SIZE,[&vertices](const float u,const float v,const float x,const float y) {
+		vertices.push_back(-1.0f + u * 2.0f);
+		vertices.push_back(-1.0f + v * 2.0f);
+		vertices.push_back(0.0f);
+		vertices.push_back(x);
+		vertices.push_back(y);
+	});
 
-	if(srcImage.data.empty())
-		return;
-	if(srcPoints.size() != 16)
-		return;
-
-	imageProgram.Use();
-
-	std::vector<GLfloat> vertices;
-	for(unsigned int y = 0; y < 4;y++)
-	{
-		for(unsigned int x = 0;x < 4;x++)
-		{
-			vertices.push_back(-1.0f + x * 2.0f / 3.0f); //X
-			vertices.push_back(-1.0f + y * 2.0f / 3.0f); //Y
-			vertices.push_back(0.0f); //Z
-
-			const unsigned int srcPointsIndex = (y * 4) + x;
-			vertices.push_back(srcPoints[srcPointsIndex].x * srcPointScaleX); //U
-			vertices.push_back(srcPoints[srcPointsIndex].y * srcPointScaleY); //V
-		}
-	}
-
-	const GLuint indices[] = {
-		0,1,5,
-		0,5,4,
-		1,2,6,
-		1,6,5,
-		2,3,7,
-		2,7,6,
-		4,5,9,
-		4,9,8,
-		5,6,10,
-		5,10,9,
-		6,7,11,
-		6,11,10,
-		8,9,13,
-		8,13,12,
-		9,10,14,
-		9,14,13,
-		10,11,15,
-		10,15,14,
-	};
+	std::vector<GLuint> indices;
+	BuildGridIndices(GRID_SIZE,indices);
 
 	GLuint outputTexture;
 	glGenTextures(1,&outputTexture);
@@ -313,38 +298,14 @@ void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPo
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 
-	GLuint inputTexture;
-	glGenTextures(1,&inputTexture);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D,inputTexture);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-	glUniform1i(imageProgram.Uniform("inputTexture"),0);
-	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,srcImage.width,srcImage.height,0,GL_RGB,GL_UNSIGNED_BYTE,&srcImage.data[0]);
-
 	GLuint fbo;
 	glGenFramebuffers(1,&fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER,fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,outputTexture,0);
 	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
-	GLuint vao;
-	glGenVertexArrays(1,&vao);
-	glBindVertexArray(vao);
-
-	GLuint vbo;
-	glGenBuffers(1,&vbo);
-	glBindBuffer(GL_ARRAY_BUFFER,vbo);
-	glBufferData(GL_ARRAY_BUFFER,vertices.size() * sizeof(float),&vertices[0],GL_STATIC_DRAW);
-	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,nullptr);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(GLfloat) * 5,reinterpret_cast<GLvoid*>(sizeof(GLfloat) * 3));
-	glEnableVertexAttribArray(1);
-
 	Viewport viewport(dstImageWidth,dstImageHeight);
-	glDrawElements(GL_TRIANGLES,18*3,GL_UNSIGNED_INT,indices);
+	DrawImagePrivate(imageProgram,srcImage,vertices.data(),vertices.size() / 5,indices.data(),indices.size());
 
 	dstImage.width = dstImageWidth;
 	dstImage.height = dstImageHeight;
@@ -353,41 +314,23 @@ void Painter::ExtractImage(const Image& srcImage,const std::vector<Point>& srcPo
 
 	glBindVertexArray(0);
 
-	glDeleteBuffers(1,&vbo);
-	glDeleteVertexArrays(1,&vao);
 	glDeleteFramebuffers(1,&fbo);
-	glDeleteTextures(1,&inputTexture);
 	glDeleteTextures(1,&outputTexture);
-	glUseProgram(0);
 }
 
 void Painter::ScaleImage(const Image& srcImage,Image& dstImage,const unsigned int dstImageWidth,const unsigned int dstImageHeight)
 {
-	std::vector<Point> points = {
-		{0.0f,0.0f},
-		{1/3.0f,0.0f},
-		{2/3.0f,0.0f},
-		{1.0f,0.0f},
-
-		{0.0f,1/3.0f},
-		{1/3.0f,1/3.0f},
-		{2/3.0f,1/3.0f},
-		{1.0f,1/3.0f},
-
-		{0.0f,2/3.0f},
-		{1/3.0f,2/3.0f},
-		{2/3.0f,2/3.0f},
-		{1.0f,2/3.0f},
-
-		{0.0f,1.0f},
-		{1/3.0f,1.0f},
-		{2/3.0f,1.0f},
-		{1.0f,1.0f},
-	};
-	ExtractImage(srcImage,points,1.0f,1.0f,dstImage,dstImageWidth,dstImageHeight);
+	ExtractImage(srcImage,
+				 {0.0f,0.0f},
+				 {1.0f,0.0f},
+				 {0.0f,1.0f},
+				 {1.0f,1.0f},
+				 dstImage,
+				 dstImageWidth,
+				 dstImageHeight);
 }
 
-void Painter::DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,const float noiseDelta,Image& dstImage)
+void Painter::DrawPuzzleGrid(const Image& srcImage,const float borderLineWidth,const float gridMinorLineWidth,const float gridMajorLineWidth,Image& dstImage)
 {
 	GLuint outputTexture;
 	glGenTextures(1,&outputTexture);
@@ -425,9 +368,21 @@ void Painter::DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidt
 		DrawLine(0,dy,srcImage.width,dy,0,0,0);
 	}
 
+	//Extract final image.
+	dstImage.MatchSize(srcImage);
+	glReadPixels(0,0,dstImage.width,dstImage.height,GL_RGB,GL_UNSIGNED_BYTE,&dstImage.data[0]);
+
+	glDeleteFramebuffers(1,&fbo);
+	glDeleteTextures(1,&outputTexture);
+	glLineWidth(1.0f);
+	glUseProgram(0);
+}
+
+void Painter::DrawNoise(const unsigned int width,const unsigned int height,const float noiseDelta)
+{
 	//Create a noise textures and use blending to apply them.
-	Image addNoiseImage(srcImage.width,srcImage.height);
-	Image subNoiseImage(srcImage.width,srcImage.height);
+	Image addNoiseImage(width,height);
+	Image subNoiseImage(width,height);
 	std::random_device randomDevice;
 	std::mt19937 randomNumberGenerator(randomDevice());
 	for(unsigned int x = 0;x < addNoiseImage.width * addNoiseImage.height;x++)
@@ -461,13 +416,94 @@ void Painter::DrawPuzzleOverlay(const Image& srcImage,const float borderLineWidt
 	glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT,GL_FUNC_ADD);
 	DrawImage(0,0,subNoiseImage.width,subNoiseImage.height,subNoiseImage);
 	glDisable(GL_BLEND);
+}
 
-	//Extract final image.
-	dstImage.MatchSize(srcImage);
-	glReadPixels(0,0,dstImage.width,dstImage.height,GL_RGB,GL_UNSIGNED_BYTE,&dstImage.data[0]);
+void Painter::DrawWarpedAndUnwarpedPuzzle(const Image& srcImage,const unsigned int frameBufferSize,const float perspectiveCornerRandomRadius,const float noiseDelta,Image& dstImage,const unsigned int dstImageSize)
+{
+	//Setup four corners with the render buffer where the srcImage will be rendered using a
+	//perspective warp. Each corner is placed randomly within a circle that touches the respective
+	//corner of the render buffer.
+	// +---------
+	// |/---\ <-
+	// ||   | <- Corner point placed randomly in this circle.
+	// |\---/ <-
+	// |
+	const float frameBufferSizef = frameBufferSize;
+	const glm::vec2 p0 = glm::vec2(perspectiveCornerRandomRadius,perspectiveCornerRandomRadius) + glm::diskRand(perspectiveCornerRandomRadius);
+	const glm::vec2 p1 = glm::vec2(frameBufferSizef - perspectiveCornerRandomRadius,perspectiveCornerRandomRadius) + glm::diskRand(perspectiveCornerRandomRadius);
+	const glm::vec2 p2 = glm::vec2(frameBufferSizef - perspectiveCornerRandomRadius,frameBufferSizef - perspectiveCornerRandomRadius) + glm::diskRand(perspectiveCornerRandomRadius);
+	const glm::vec2 p3 = glm::vec2(perspectiveCornerRandomRadius,frameBufferSizef - perspectiveCornerRandomRadius) + glm::diskRand(perspectiveCornerRandomRadius);
+	const glm::mat3 generationMatrix = BuildPerspectiveMatrix(p0 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f),
+															  p1 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f),
+															  p2 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f),
+															  p3 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f));
+	const glm::mat3 extractionMatrix = BuildPerspectiveMatrix(p0 / frameBufferSizef,
+															  p1 / frameBufferSizef,
+															  p2 / frameBufferSizef,
+															  p3 / frameBufferSizef);
 
+	//Setup framebuffer to render perspective warp to.
+	GLuint workingTexture;
+	glGenTextures(1,&workingTexture);
+	glBindTexture(GL_TEXTURE_2D,workingTexture);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,frameBufferSize,frameBufferSize,0,GL_RGB,GL_UNSIGNED_BYTE,nullptr);
+
+	GLuint fbo;
+	glGenFramebuffers(1,&fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,workingTexture,0);
+	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+	Viewport viewport(frameBufferSize,frameBufferSize);
+
+	//Setup an overly fine mesh with perspective warp and render srcImage with it. The extra
+	//quality isn't really necessary but it's an offline process so whatever.
+	constexpr unsigned int GRID_SIZE = 80; //Number of lines, including ends.
+	std::vector<GLfloat> vertices;
+	BuildGrid(generationMatrix,GRID_SIZE,[&vertices](const float u,const float v,const float x,const float y) {
+		vertices.push_back(x);
+		vertices.push_back(y);
+		vertices.push_back(0.0f);
+		vertices.push_back(u);
+		vertices.push_back(v);
+	});
+
+	std::vector<GLuint> indices;
+	BuildGridIndices(GRID_SIZE,indices);
+
+	DrawImagePrivate(imageProgram,srcImage,vertices.data(),vertices.size() / 5,indices.data(),indices.size());
+
+	//Draw noise over the framebuffer to simulate noise from a camera.
+	DrawNoise(frameBufferSize,frameBufferSize,noiseDelta);
+
+	//Extract framebuffer as an image. This part could be skipped in favor of doing the rest of the
+	//work directly on the GPU. But, this lets us re-use the ExtractImage() function which is used
+	//to extract a puzzle from a video frame.
+	Image renderBufferImage(frameBufferSize,frameBufferSize);
+	glReadPixels(0,0,renderBufferImage.width,renderBufferImage.height,GL_RGB,GL_UNSIGNED_BYTE,&renderBufferImage.data[0]);
+
+	//Clean-up.
 	glDeleteFramebuffers(1,&fbo);
-	glDeleteTextures(1,&outputTexture);
+	glDeleteTextures(1,&workingTexture);
 	glLineWidth(1.0f);
 	glUseProgram(0);
+
+	//Extract puzzle from framebuffer so similar noise and distortions are applied as if the puzzle
+	//was pulled from a real image.
+	std::vector<Point> extractionPoints;
+	extractionPoints.reserve(4);
+	BuildGrid(extractionMatrix,2,[&extractionPoints](const float u,const float v,const float x,const float y) {
+			extractionPoints.push_back({x,y});
+	});
+	ExtractImage(renderBufferImage,
+				 extractionPoints[0],
+				 extractionPoints[1],
+				 extractionPoints[2],
+				 extractionPoints[3],
+				 dstImage,
+				 dstImageSize,
+				 dstImageSize);
 }
+

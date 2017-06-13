@@ -14,6 +14,12 @@
 #include <cassert>
 #include <cmath>
 
+
+Point operator*(const Point& lhs,const Point& rhs)
+{
+	return {lhs.x * rhs.x,lhs.y * rhs.y};
+}
+
 float MeanTheta(const std::vector<Line>& lines)
 {
 	assert(!lines.empty());

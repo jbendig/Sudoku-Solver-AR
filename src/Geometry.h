@@ -26,6 +26,8 @@ struct Point
 	float y;
 };
 
+Point operator*(const Point& lhs,const Point& rhs);
+
 float MeanTheta(const std::vector<Line>& lines);
 float DifferenceTheta(const float theta1,const float theta2);
 

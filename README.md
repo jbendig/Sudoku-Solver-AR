@@ -25,6 +25,7 @@ Requirements
 * [CMake](https://cmake.org/) >= 3.6.2
 * GCC >= 6.3.1 OR clang >= 3.9.1
 * [GLFW](http://www.glfw.org/) >= 3.2
+* [glm](http://glm.g-truc.net/) >= 0.9.8
 * mesa-libGL
 * mesa-libGLES
 
@@ -60,6 +61,7 @@ Requirements
 * [Visual Studio](https://www.visualstudio.com/) >= 2017 (Older versions are not supported because C++17 support is required)
 * [GLFW](http://www.glfw.org/) >= 3.2
 * [GLEW](http://glew.sourceforge.net/) >= 2.0
+* [glm](http://glm.g-truc.net/) >= 0.9.8
 * [OpenGL ES 3.0 Headers](https://www.khronos.org/registry/OpenGL/index_es.php#headers3) (Make sure to get KHR/khrplatform.h on the same page)
 
 Clone or download source code from:
