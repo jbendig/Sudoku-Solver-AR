@@ -332,7 +332,7 @@ bool NeuralNetworkData::LoadFromBinary(const std::string& filePath)
 	inFile.read(reinterpret_cast<char*>(&outputChoices[0]),outputChoicesSize);
 
 	//Figure out the remaining parameters from the loaded data.
-	inputSize = trainingData[0].first.size();
+	inputSize = layers[0][0].size();
 	InitializeLayerOutputs(layers,layerOutputs);
 
 	return true;
