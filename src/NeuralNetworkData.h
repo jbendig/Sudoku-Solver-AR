@@ -12,6 +12,7 @@
 #ifndef NODENETWORKDATA_H
 #define NODENETWORKDATA_H
 
+#include <string>
 #include <vector>
 #include "AlignedVector.h"
 
@@ -33,12 +34,12 @@ struct NeuralNetworkData
 	void InitializeWithTrainingData(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData);
 
 	//Save/load using an inefficient text format for debugging.
-	void SaveAsText();
-	bool LoadFromText();
+	void SaveAsText(const std::string& filePath);
+	bool LoadFromText(const std::string& filePath);
 
 	//Save/load using an inefficient binary format.
-	void SaveAsBinary();
-	bool LoadFromBinary();
+	void SaveAsBinary(const std::string& filePath);
+	bool LoadFromBinary(const std::string& filePath);
 };
 
 #endif

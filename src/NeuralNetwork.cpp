@@ -24,6 +24,9 @@
 #include "NeuralNetworkData.h"
 
 
+static const char* TRAINING_DATA_FILE_PATH = "training.dat";
+static const char* TRAINED_DATA_FILE_PATH = "trained.dat";
+
 static float Sigmoid(const float value)
 {
 	const float exponent = value;
@@ -165,16 +168,12 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 	if(trainingData.empty())
 		return NeuralNetwork();
 
+	NeuralNetwork nn;
+
 	//Try to load previous training session and resume from it if possible. Otherwise, start a new
 	//session.
-	NeuralNetwork nn;
-	if(!nn.data->LoadFromBinary())
+	if(!nn.data->LoadFromBinary(TRAINING_DATA_FILE_PATH))
 		nn.data->InitializeWithTrainingData(trainingData);
-
-	//Skip training if it was already completed.
-	//TODO: This won't work correctly until we store the output choices when saving too.
-	if(nn.data->trainingData.empty())
-		return nn;
 
 	//Train by back propagation.
 	const float correctionIncrement = 0.005f;
@@ -244,7 +243,7 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 		//Save every once in a while since processing can take hours.
 		if(totalError < 1.0f || (x != 0 && (x % 25) == 0))
 		{
-			nn.data->SaveAsBinary();
+			nn.data->SaveAsBinary(TRAINING_DATA_FILE_PATH);
 			deltaTimer.Update();
 			std::cout << "Took " << deltaTimer.Delta() << " sec(s) to save" << std::endl;
 		}
@@ -253,6 +252,7 @@ NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsig
 	//Done training, no reason to keep the (potentially large) training data around.
 	nn.data->trainingData.clear();
 	nn.data->trainingData.shrink_to_fit();
+	nn.data->SaveAsBinary(TRAINED_DATA_FILE_PATH);
 
 	return nn;
 }

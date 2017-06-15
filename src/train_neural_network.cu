@@ -19,6 +19,8 @@
 #include "NeuralNetworkData.h"
 
 
+static const char* TRAINING_DATA_FILE_PATH = "training.dat";
+
 //CUDA block and thread counts here were manually tuned for a GTX 660.
 static const unsigned int PROCESS_NEURON_WEIGHTS_BLOCK_COUNT = 80;
 static const unsigned int PROCESS_NEURON_WEIGHTS_THREAD_COUNT = 128;
@@ -153,7 +155,7 @@ int main(int argc,char* argv[])
 {
 	//Load existing neural network from file to resume with.
 	NeuralNetworkData nnData;
-	if(!nnData.LoadFromBinary())
+	if(!nnData.LoadFromBinary(TRAINING_DATA_FILE_PATH))
 	{
 		std::cerr << "Could not load training data." << std::endl;
 		return -1;
@@ -314,7 +316,7 @@ int main(int argc,char* argv[])
 		if(totalError < 1.0f || ((x % 100) == 0 && x != 0))
 		{
 			FetchWeightsFromGPU(deviceLayerWeights,nnData);
-			nnData.SaveAsBinary();
+			nnData.SaveAsBinary(TRAINING_DATA_FILE_PATH);
 			std::cout << "Saved." << std::endl;
 		}
 	}

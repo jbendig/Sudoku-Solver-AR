@@ -18,9 +18,6 @@
 #include <cassert>
 
 
-static const char* TEXT_FILE_PATH = "training.dat";
-static const char* BINARY_FILE_PATH = "training.bin.dat";
-
 static void TrainingDataOutputChoices(const std::vector<std::pair<AlignedVector,unsigned char>>& trainingData,std::vector<unsigned char>& outputChoices)
 {
 	std::set<unsigned char> outputChoiceSet;
@@ -140,9 +137,9 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 	inputSize = this->trainingData[0].first.size();
 }
 
-void NeuralNetworkData::SaveAsText()
+void NeuralNetworkData::SaveAsText(const std::string& filePath)
 {
-	std::ofstream outFile(TEXT_FILE_PATH);
+	std::ofstream outFile(filePath);
 	if(!outFile)
 	{
 		std::cerr << "Could not save neural network training." << std::endl;
@@ -178,13 +175,13 @@ void NeuralNetworkData::SaveAsText()
 	}
 }
 
-bool NeuralNetworkData::LoadFromText()
+bool NeuralNetworkData::LoadFromText(const std::string& filePath)
 {
 	//WARNING: This function makes no attempt to validate that the loaded data is safe.
 
 	Clear();
 
-	std::ifstream inFile(TEXT_FILE_PATH);
+	std::ifstream inFile(filePath);
 	if(!inFile)
 		return false;
 
@@ -247,9 +244,9 @@ bool NeuralNetworkData::LoadFromText()
 	return true;
 }
 
-void NeuralNetworkData::SaveAsBinary()
+void NeuralNetworkData::SaveAsBinary(const std::string& filePath)
 {
-	std::ofstream outFile(BINARY_FILE_PATH,std::ios::binary);
+	std::ofstream outFile(filePath,std::ios::binary);
 	if(!outFile)
 	{
 		std::cerr << "Could not save neural network training." << std::endl;
@@ -285,13 +282,13 @@ void NeuralNetworkData::SaveAsBinary()
 	outFile.write(reinterpret_cast<const char*>(&outputChoices[0]),outputChoices.size());
 }
 
-bool NeuralNetworkData::LoadFromBinary()
+bool NeuralNetworkData::LoadFromBinary(const std::string& filePath)
 {
 	//WARNING: This function makes no attempt to validate that the loaded data is safe.
 
 	Clear();
 
-	std::ifstream inFile(BINARY_FILE_PATH,std::ios::binary);
+	std::ifstream inFile(filePath,std::ios::binary);
 	if(!inFile)
 		return false;
 
