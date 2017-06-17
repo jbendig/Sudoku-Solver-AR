@@ -250,7 +250,7 @@ Image GeneratePlaceholderAnswerImage()
 	return image;
 }
 
-static void RenderPuzzle(Painter& painter,const std::string& font,const std::vector<unsigned char>& digits,Image& image)
+static void RenderPuzzle(Painter& painter,const std::string& font,const unsigned int fontSize,const std::vector<unsigned char>& digits,Image& image)
 {
 	auto DrawBitmapCentered = [&image](unsigned int offsetX,unsigned int offsetY,const unsigned int targetWidth,const unsigned int targetHeight,FT_Bitmap& bitmap)
 	{
@@ -283,7 +283,7 @@ static void RenderPuzzle(Painter& painter,const std::string& font,const std::vec
 	FT_Face face;
 	if(FT_New_Face(ftLibrary,font.c_str(),0,&face) != FT_Err_Ok)
 		std::abort();
-	if(FT_Set_Pixel_Sizes(face,0,64) != FT_Err_Ok)
+	if(FT_Set_Pixel_Sizes(face,0,fontSize) != FT_Err_Ok)
 		std::abort();
 
 	const float dx = image.width / 9.0f;
@@ -307,9 +307,9 @@ static void RenderPuzzle(Painter& painter,const std::string& font,const std::vec
 
 	Image srcImage = image;
 	painter.DrawPuzzleGrid(srcImage,
-						   4.0f, //Border line width (px).
-						   1.0f, //Grid minor line width (px).
-						   3.0f, //Grid major line width (px).
+						   16.0f, //Border line width (px).
+						   4.0f, //Grid minor line width (px).
+						   8.0f, //Grid major line width (px).
 						   image);
 	srcImage = image;
 	painter.DrawWarpedAndUnwarpedPuzzle(srcImage,
@@ -359,7 +359,153 @@ static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
 	}
 }
 
-static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGenerator,Image& puzzleImage,std::vector<unsigned char>& digits)
+static void PreprocessNeuralNetworkImage(Image& image,const float a,const unsigned char binaryHigh)
+{
+	if(image.width == 0 || image.height == 0)
+		return;
+
+	//Compute the global mean.
+	float globalMean = 0.0f;
+	for(unsigned int x = 0;x < image.width * image.height;x++)
+	{
+		const unsigned int index = x * 3;
+		globalMean += image.data[index];
+	}
+	globalMean /= static_cast<float>(image.width * image.height);
+
+	//Helper function to get the (greyscale) pixel from an image with the edges clamped to the
+	//nearest pixel.
+	auto GetPixel = [&image](int x,int y)
+	{
+		x = std::min(std::max(0,x),static_cast<int>(image.width) - 1);
+		y = std::min(std::max(0,y),static_cast<int>(image.height) - 1);
+		const unsigned int index = (y * image.width + x) * 3;
+		return image.data[index];
+	};
+
+	//Localized thresholding using local standard deviation and global mean. It works well for
+	//solid backgrounds like our digits. The "a" and "b" factors are found through experimentation.
+	Image outputImage;
+	outputImage.MatchSize(image);
+	float pixels[9];
+	constexpr float b = 0.95f;
+	for(int y = 0;y < static_cast<int>(image.height);y++)
+	{
+		for(int x = 0;x < static_cast<int>(image.width);x++)
+		{
+			pixels[0] = GetPixel(x - 1,y - 1);
+			pixels[1] = GetPixel(x,y - 1);
+			pixels[2] = GetPixel(x + 1,y - 1);
+			pixels[3] = GetPixel(x - 1,y);
+			pixels[4] = GetPixel(x,y);
+			pixels[5] = GetPixel(x + 1,y);
+			pixels[6] = GetPixel(x - 1,y + 1);
+			pixels[7] = GetPixel(x,y + 1);
+			pixels[8] = GetPixel(x + 1,y + 1);
+
+			const float localMean = (pixels[0] + pixels[1] + pixels[2] + pixels[3] + pixels[4] + pixels[5] + pixels[6] + pixels[7] + pixels[8]) / 9.0f;
+			float localVar = 0.0f;
+			for(unsigned int x = 0;x < 9;x++)
+			{
+				const float toSquareTerm = pixels[4] - localMean;
+				localVar += toSquareTerm * toSquareTerm;
+			}
+			localVar /= 9.0f;
+			const float localStdDev = sqrtf(localVar);
+
+			const unsigned int index = (y * image.width + x) * 3;
+			if(pixels[4] > a * localStdDev && pixels[4] > b * globalMean)
+			{
+				outputImage.data[index + 0] = binaryHigh;
+				outputImage.data[index + 1] = binaryHigh;
+				outputImage.data[index + 2] = binaryHigh;
+			}
+			else
+			{
+				outputImage.data[index + 0] = 0;
+				outputImage.data[index + 1] = 0;
+				outputImage.data[index + 2] = 0;
+			}
+		}
+	}
+	image = outputImage;
+}
+
+static void ShuffleEdgePixels(std::mt19937& randomNumberGenerator,Image& image,const unsigned char binaryHigh)
+{
+	//Each edge pixel is given a random number using keepPixelDist(). If it's greater than the
+	//randomly selected V, the pixel will be copied to a random neighbor's pixel and then the
+	//original pixel is inverted.
+	std::uniform_real_distribution<> keepPixelDist(0.0f,1.0f);
+	std::uniform_real_distribution<> noiseDist(0.95,0.99f);
+	const float V = noiseDist(randomNumberGenerator);
+
+	//Used for selecting a random neighbor when a pixel is shuffled. A value of 0 means left or
+	//above and a value of 1 means right or below.
+	std::uniform_int_distribution<> newPosDist(0,1);
+
+	//Threshold used to determine if a pixel is an edge. Generally an edge is anything not zero.
+	const float laplaceThreshold = 0.1f * static_cast<float>(binaryHigh);
+
+	Image tempImage = image;
+	const unsigned int rowSpan = tempImage.width * 3;
+	for(unsigned int y = 1;y < tempImage.height - 1;y++)
+	{
+		for(unsigned int x = 1;x < tempImage.width - 1;x++)
+		{
+			const unsigned int inputIndex = (y * tempImage.width + x) * 3;
+			const float laplace = static_cast<float>(tempImage.data[inputIndex - rowSpan]) +
+								  static_cast<float>(tempImage.data[inputIndex - 3])       + static_cast<float>(tempImage.data[inputIndex + 3]) * -4.0f + static_cast<float>(tempImage.data[inputIndex + 3]) +
+								  static_cast<float>(tempImage.data[inputIndex + rowSpan]);
+			if(fabsf(laplace) > laplaceThreshold)
+			{
+				if(keepPixelDist(randomNumberGenerator) > V)
+				{
+					//Move pixel value to a neighbor spot.
+					const int newX = x + -1 + 2 * newPosDist(randomNumberGenerator);
+					const int newY = y + -1 + 2 * newPosDist(randomNumberGenerator);
+					const unsigned int otherIndex = (newY * tempImage.width + newX) * 3;
+					image.data[otherIndex + 0] = image.data[inputIndex + 0];
+					image.data[otherIndex + 1] = image.data[inputIndex + 1];
+					image.data[otherIndex + 2] = image.data[inputIndex + 2];
+
+					//Invert pixel.
+					image.data[inputIndex + 0] = abs(static_cast<int>(binaryHigh) - static_cast<int>(image.data[inputIndex + 0]));
+					image.data[inputIndex + 1] = abs(static_cast<int>(binaryHigh) - static_cast<int>(image.data[inputIndex + 1]));
+					image.data[inputIndex + 2] = abs(static_cast<int>(binaryHigh) - static_cast<int>(image.data[inputIndex + 2]));
+				}
+			}
+		}
+	}
+}
+
+std::vector<unsigned char> ImageToData(const Image& image)
+{
+	//Assumes image is greyscale and just copies red-channel to data.
+	std::vector<unsigned char> data(image.width * image.height);
+	for(unsigned int x = 0;x < image.width * image.height;x++)
+	{
+		data[x] = image.data[x * 3];
+	}
+
+	return data;
+}
+
+static void ExtractDigits(NeuralNetwork& nn,const Image& puzzleImage,std::vector<unsigned char>& digits)
+{
+	digits.clear();
+
+	std::vector<Image> puzzleTiles;
+	ExtractPuzzleTiles(puzzleImage,puzzleTiles);
+	for(unsigned int x = 0;x < puzzleTiles.size();x++)
+	{
+		PreprocessNeuralNetworkImage(puzzleTiles[x],2.0f,1);
+		const unsigned char digit = nn.Run(ImageToData(puzzleTiles[x]));
+		digits.push_back(digit);
+	}
+}
+
+static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGenerator,Image& puzzleImage,std::vector<unsigned char>& digits,const unsigned int binaryHigh)
 {
 	//Select a random font.
 	const std::vector<std::string> fonts = {
@@ -384,80 +530,65 @@ static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGene
 	}
 
 	//Render the puzzle with a border, grid, and extra noise.
-	RenderPuzzle(painter,font,digits,puzzleImage);
+	std::uniform_int_distribution<> fontSizeDist(48,64);
+	RenderPuzzle(painter,font,fontSizeDist(randomNumberGenerator),digits,puzzleImage);
 
 	//Preprocess the puzzle as a binary image to improve training speed and accuracy.
-	for(unsigned int x = 0;x < puzzleImage.width * puzzleImage.height;x++)
-	{
-		const unsigned int index = x * 3;
+	std::uniform_real_distribution<> aDist(2.0f,4.0f);
+	const float a = aDist(randomNumberGenerator);
+	PreprocessNeuralNetworkImage(puzzleImage,a,binaryHigh);
 
-		if(puzzleImage.data[index] > 128)
-		{
-			puzzleImage.data[index + 0] = 1;
-			puzzleImage.data[index + 1] = 1;
-			puzzleImage.data[index + 2] = 1;
-		}
-		else
-		{
-			puzzleImage.data[index + 0] = 0;
-			puzzleImage.data[index + 1] = 0;
-			puzzleImage.data[index + 2] = 0;
-		}
-	}
+	//Randomize edge pixels to help make the model more general.
+	ShuffleEdgePixels(randomNumberGenerator,puzzleImage,binaryHigh);
 }
 
-static void PrepareOCRNeuralNetwork(Painter& painter)
+static NeuralNetwork PrepareOCRNeuralNetwork(Painter& painter)
 {
-	auto ImageToData = [](const Image& image)
-	{
-		//Assumes image is greyscale and just copies red-channel to data.
-		std::vector<unsigned char> data(image.width * image.height);
-		for(unsigned int x = 0;x < image.width * image.height;x++)
-		{
-			data[x] = image.data[x * 3];
-		}
-
-		return data;
-	};
-
 	std::random_device randomDevice;
 	std::mt19937 randomNumberGenerator(randomDevice());
 
 	//Render a bunch of random puzzles using the following fonts. Each puzzle is processed with
 	//noise to help improve training results.
-	std::vector<std::pair<std::vector<unsigned char>,unsigned char>> trainingData;
-	for(unsigned int x = 0;x < 1000;x++)
+	auto GenerateSampleData = [&painter,&randomNumberGenerator]()
 	{
-		Image puzzleImage;
-		std::vector<unsigned char> digits;
-		GenerateRandomPuzzle(painter,randomNumberGenerator,puzzleImage,digits);
-
-		std::vector<Image> puzzleTiles;
-		ExtractPuzzleTiles(puzzleImage,puzzleTiles);
-		for(unsigned int x = 0;x < puzzleTiles.size();x++)
+		std::vector<std::pair<std::vector<unsigned char>,unsigned char>> data;
+		for(unsigned int x = 0;x < 3000;x++)
 		{
-			trainingData.push_back({ImageToData(puzzleTiles[x]),digits[x]});
+			Image puzzleImage;
+			std::vector<unsigned char> digits;
+			GenerateRandomPuzzle(painter,randomNumberGenerator,puzzleImage,digits,1);
+
+			std::vector<Image> puzzleTiles;
+			ExtractPuzzleTiles(puzzleImage,puzzleTiles);
+			for(unsigned int x = 0;x < puzzleTiles.size();x++)
+			{
+				data.push_back({ImageToData(puzzleTiles[x]),digits[x]});
+			}
 		}
-	}
 
-	//Randomize puzzle tiles so NN doesn't over train to a specific font.
-	std::shuffle(trainingData.begin(),trainingData.end(),randomNumberGenerator);
+		return data;
+	};
 
-	//Train neural network. It will likely take many hours.
-	NeuralNetwork nn = NeuralNetwork::Train(trainingData);
+	//Train neural network. It will likely take along time unless a pre-trained network is detected
+	//and loaded from file.
+	NeuralNetwork nn = NeuralNetwork::Train([&GenerateSampleData,&randomNumberGenerator](std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData) {
+		trainingData = GenerateSampleData();
+
+		//Randomize puzzle tiles so NN doesn't over train to a specific font.
+		std::shuffle(trainingData.begin(),trainingData.end(),randomNumberGenerator);
+	});
 
 	//Measure how accurate the NN is.
-	//TODO: Should generate a new test set.
+	const std::vector<std::pair<std::vector<unsigned char>,unsigned char>> testData = GenerateSampleData();
 	unsigned int correct = 0;
-	for(const auto& td : trainingData)
+	for(const auto& td : testData)
 	{
 		if(nn.Run(td.first) == td.second)
 			correct += 1;
 	}
-	std::cout << "Identified " << correct << " out of " << trainingData.size() << std::endl;
+	std::cout << "Identified " << correct << " out of " << testData.size() << std::endl;
 
-	//TODO: Remove the following line once NN becomes usable.
-	std::abort();
+	return nn;
 }
 
 void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
@@ -503,7 +634,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 	glfwGetFramebufferSize(window,&windowWidth,&windowHeight);
 
 	Painter painter;
-	PrepareOCRNeuralNetwork(painter);
+	NeuralNetwork nn = PrepareOCRNeuralNetwork(painter);
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
 	Image downscaledFrame;
@@ -550,7 +681,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 		if(puzzleFinder.Find(drawImageWidth,drawImageHeight,houghTransformFrame,puzzlePoints))
 		{
 			const Point scalerPoint = {1.0f / drawImageWidth,1.0f / drawImageHeight};
-			painter.ExtractImage(*inputFrame,
+			painter.ExtractImage(greyscaleFrame,
 								 puzzlePoints[0] * scalerPoint,
 								 puzzlePoints[1] * scalerPoint,
 								 puzzlePoints[2] * scalerPoint,
@@ -568,6 +699,9 @@ int __stdcall WinMain(void*,void*,void*,int)
 		//Draw answer composite over puzzle if available.
 		if(!puzzlePoints.empty())
 		{
+			std::vector<unsigned char> digits;
+			ExtractDigits(nn,puzzleFrame,digits);
+
 			//TODO: Generate answer texture here instead of using placeholder.
 			const Image answerImage = GeneratePlaceholderAnswerImage();
 

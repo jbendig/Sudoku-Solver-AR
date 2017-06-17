@@ -163,17 +163,24 @@ static void RunNetworkTrained(const std::vector<std::vector<AlignedVector>>& lay
 	}
 }
 
-NeuralNetwork NeuralNetwork::Train(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData)
+NeuralNetwork NeuralNetwork::Train(std::function<void(std::vector<std::pair<std::vector<unsigned char>,unsigned char>>&)> buildTrainingDataFunc)
 {
-	if(trainingData.empty())
-		return NeuralNetwork();
-
 	NeuralNetwork nn;
 
-	//Try to load previous training session and resume from it if possible. Otherwise, start a new
-	//session.
+	//Try and load a pre-trained set first.
+	if(nn.data->LoadFromBinary(TRAINED_DATA_FILE_PATH))
+		return nn;
+
+	//Try and resume from previous training attempt.
 	if(!nn.data->LoadFromBinary(TRAINING_DATA_FILE_PATH))
+	{
+		//Otherwise, start training using a new set.
+		std::vector<std::pair<std::vector<unsigned char>,unsigned char>> trainingData;
+		buildTrainingDataFunc(trainingData);
+		if(trainingData.empty())
+			return NeuralNetwork();
 		nn.data->InitializeWithTrainingData(trainingData);
+	}
 
 	//Train by back propagation.
 	const float correctionIncrement = 0.005f;

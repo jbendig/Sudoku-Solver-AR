@@ -79,7 +79,8 @@ static glm::mat3 BuildPerspectiveMatrix(const glm::vec2 p0,const glm::vec2 p1,co
 	return glm::mat3(a11,a21,a31,a12,a22,a32,a13,a23,a33);
 }
 
-static void BuildGrid(const glm::mat3& matrix,const unsigned int gridSize,auto addPointFunc)
+template <class T>
+static void BuildGrid(const glm::mat3& matrix,const unsigned int gridSize,T addPointFunc)
 {
 	if(gridSize == 0)
 		return;
@@ -437,10 +438,13 @@ void Painter::DrawWarpedAndUnwarpedPuzzle(const Image& srcImage,const unsigned i
 															  p1 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f),
 															  p2 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f),
 															  p3 * 2.0f / frameBufferSizef - glm::vec2(1.0f,1.0f));
-	const glm::mat3 extractionMatrix = BuildPerspectiveMatrix(p0 / frameBufferSizef,
-															  p1 / frameBufferSizef,
-															  p2 / frameBufferSizef,
-															  p3 / frameBufferSizef);
+	//The extraction matrix is formed from points that are further (but only slightly) randomized
+	//to help simulate the lower accuracy being used in the hough transform.
+	const float perspectiveCornerErrorRandomRadius = 0.05f * perspectiveCornerRandomRadius;
+	const glm::mat3 extractionMatrix = BuildPerspectiveMatrix((p0 + glm::diskRand(perspectiveCornerErrorRandomRadius)) / frameBufferSizef,
+															  (p1 + glm::diskRand(perspectiveCornerErrorRandomRadius)) / frameBufferSizef,
+															  (p2 + glm::diskRand(perspectiveCornerErrorRandomRadius)) / frameBufferSizef,
+															  (p3 + glm::diskRand(perspectiveCornerErrorRandomRadius)) / frameBufferSizef);
 
 	//Setup framebuffer to render perspective warp to.
 	GLuint workingTexture;

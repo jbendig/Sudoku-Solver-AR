@@ -21,7 +21,7 @@ struct NeuralNetworkData;
 class NeuralNetwork
 {
 	public:
-		static NeuralNetwork Train(const std::vector<std::pair<std::vector<unsigned char>,unsigned char>>& trainingData);
+		static NeuralNetwork Train(std::function<void(std::vector<std::pair<std::vector<unsigned char>,unsigned char>>&)> buildTrainingDataFunc);
 		unsigned char Run(const std::vector<unsigned char>& inputData) const;
 	private:
 		std::shared_ptr<NeuralNetworkData> data;
