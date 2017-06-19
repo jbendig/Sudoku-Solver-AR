@@ -112,7 +112,8 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 
 	//Setup NN layers. There needs to be a minimum of one hidden layer and one output layer but
 	//there can be as many hidden layers as necessary.
-	layers.push_back(std::vector<AlignedVector>(inputSize / 2)); //Hidden layer.
+	layers.push_back(std::vector<AlignedVector>(originalInputSize / 2)); //Hidden layer.
+	layers.push_back(std::vector<AlignedVector>(originalInputSize / 8)); //Hidden layer.
 	layers.push_back(std::vector<AlignedVector>(outputSize)); //Output layer.
 	InitializeLayerOutputs(layers,layerOutputs);
 
