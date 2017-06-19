@@ -120,7 +120,7 @@ void NeuralNetworkData::InitializeWithTrainingData(const std::vector<std::pair<s
 	//Randomize initial weights.
 	std::random_device randomDevice;
 	std::mt19937 randomNumberGenerator(randomDevice());
-	unsigned int previousLayerSize = inputSize;
+	unsigned int previousLayerSize = originalInputSize;
 	for(std::vector<AlignedVector>& layer : layers)
 	{
 		for(AlignedVector& neuron : layer)
