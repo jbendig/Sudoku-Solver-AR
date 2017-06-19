@@ -12,6 +12,7 @@
 #ifndef ALIGNEDVECTOR_H
 #define ALIGNEDVECTOR_H
 
+#include <algorithm>
 #include <cstring>
 #ifdef __linux
 #include <cstdlib>
@@ -54,7 +55,7 @@ class AlignedVector
 		}
 		~AlignedVector()
 		{
-			free(data);
+			free();
 		}
 		AlignedVector& operator=(const AlignedVector& other)
 		{
@@ -80,11 +81,13 @@ class AlignedVector
 			float* newData = nullptr;
 #ifdef __linux
 			posix_memalign(reinterpret_cast<void**>(&newData),32,newSize * sizeof(float));
+#elif defined _WIN32
+			newData = reinterpret_cast<float*>(_aligned_malloc(newSize * sizeof(float),32));
 #else
 #error Platform not supported.
 #endif
 			memcpy(newData,data,std::min(dataSize,newSize) * sizeof(float));
-			free(data);
+			free();
 
 			data = newData;
 			dataSize = newSize;
@@ -122,6 +125,17 @@ class AlignedVector
 		{
 			resize(other.dataSize);
 			memcpy(data,other.data,dataSize * sizeof(float));
+		}
+		void free()
+		{
+
+#ifdef __linux
+			::free(data);
+#elif defined _WIN32
+			_aligned_free(data);
+#else
+#error Platform not supported.
+#endif
 		}
 };
 

@@ -36,6 +36,12 @@ static constexpr unsigned int PUZZLE_IMAGE_WIDTH = 144;
 static constexpr unsigned int PUZZLE_IMAGE_HEIGHT = PUZZLE_IMAGE_WIDTH;
 static constexpr unsigned int PUZZLE_DISPLAY_WIDTH = 600;
 static constexpr unsigned int PUZZLE_DISPLAY_HEIGHT = PUZZLE_DISPLAY_WIDTH;
+#ifdef __linux
+static constexpr char* PUZZLE_SOLUTION_FONT = "/usr/share/fonts/oxygen/Oxygen-Sans.ttf";
+#elif defined _WIN32
+static constexpr char* PUZZLE_SOLUTION_FONT = "C:/Windows/Fonts/times.ttf";
+#else Platform not supported
+#endif
 
 static bool drawLines = false;
 static bool drawLineClusters = false;
@@ -496,6 +502,7 @@ static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGene
 {
 	//Select a random font.
 	const std::vector<std::string> fonts = {
+#ifdef __linux
 		"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",
 		"/usr/share/fonts/oxygen/OxygenMono-Regular.ttf",
 		"/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
@@ -503,6 +510,18 @@ static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGene
 		"/usr/share/fonts/google-droid/DroidSans.ttf",
 		"/usr/share/fonts/dejavu/DejaVuSans.ttf",
 		"/usr/share/fonts/dejavu/DejaVuSerif.ttf",
+#elif defined _WIN32
+		"C:/Windows/Fonts/arial.ttf",
+		"C:/Windows/Fonts/calibri.ttf",
+		"C:/Windows/Fonts/cambria.ttc",
+		"C:/Windows/Fonts/Candara.ttf",
+		"C:/Windows/Fonts/constan.ttf",
+		"C:/Windows/Fonts/couri.ttf",
+		"C:/Windows/Fonts/Gabriola.ttf",
+		"C:/Windows/Fonts/times.ttf",
+#else
+#error Platform not supported
+#endif
 	};
 
 	std::uniform_int_distribution<> fontDist(0,fonts.size() - 1);
@@ -728,7 +747,7 @@ int __stdcall WinMain(void*,void*,void*,int)
 						solution[x] = 0;
 				}
 
-				RenderPuzzle(painter,"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",48,solution,solutionImage);
+				RenderPuzzle(painter,PUZZLE_SOLUTION_FONT,48,solution,solutionImage);
 			}
 			else
 				//Draw a placeholder to indicate that a puzzle was found even if it couldn't be

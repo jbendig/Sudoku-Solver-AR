@@ -12,6 +12,7 @@
 #ifndef NEURALNETWORK_H
 #define NEURALNETWORK_H
 
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
