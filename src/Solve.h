@@ -14,6 +14,7 @@
 
 class Game;
 
+bool Solvable(Game game);
 bool Solve(Game& game);
 
 #endif

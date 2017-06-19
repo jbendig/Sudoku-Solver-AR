@@ -23,6 +23,7 @@
 #include <GL/glew.h>
 #endif
 #include <GLFW/glfw3.h>
+#include "CachedPuzzleSolver.h"
 #include "Camera.h"
 #include "Geometry.h"
 #include "Image.h"
@@ -213,7 +214,7 @@ void FitImage(const unsigned int windowWidth,const unsigned int windowHeight,con
 	y = abs(static_cast<int>(windowHeight) - static_cast<int>(height)) / 2;
 }
 
-Image GeneratePlaceholderAnswerImage()
+void GeneratePlaceholderAnswerImage(Image& image)
 {
 	constexpr unsigned int IMAGE_WIDTH = 600;
 	constexpr unsigned int IMAGE_HEIGHT = 600;
@@ -222,8 +223,10 @@ Image GeneratePlaceholderAnswerImage()
 	constexpr float DX = ((IMAGE_WIDTH / 9.0f) - BOX_WIDTH) / 2.0f;
 	constexpr float DY = ((IMAGE_HEIGHT / 9.0f) - BOX_HEIGHT) / 2.0f;
 
-	Image image(IMAGE_WIDTH,IMAGE_HEIGHT);
-	std::fill(image.data.begin(),image.data.end(),0);
+	image.width = IMAGE_WIDTH;
+	image.height = IMAGE_HEIGHT;
+	image.data.resize(image.width * image.height * 3);
+	std::fill(image.data.begin(),image.data.end(),255);
 
 	auto DrawBox = [&](const unsigned int x,const unsigned int y,const unsigned int width,const unsigned int height)
 	{
@@ -232,9 +235,9 @@ Image GeneratePlaceholderAnswerImage()
 			for(unsigned int h = x;h < x + width;h++)
 			{
 				const unsigned int index = (v * image.width + h) * 3;
-				image.data[index + 0] = 255;
-				image.data[index + 1] = 0;
-				image.data[index + 2] = 0;
+				image.data[index + 0] = 16;
+				image.data[index + 1] = 16;
+				image.data[index + 2] = 16;
 			}
 		}
 	};
@@ -246,8 +249,6 @@ Image GeneratePlaceholderAnswerImage()
 			DrawBox(lround(DX + 2 * x * DX + x * BOX_WIDTH),lround(DY + 2 * y * DY + y * BOX_HEIGHT),BOX_WIDTH,BOX_HEIGHT);
 		}
 	}
-
-	return image;
 }
 
 static void RenderPuzzle(Painter& painter,const std::string& font,const unsigned int fontSize,const std::vector<unsigned char>& digits,Image& image)
@@ -304,20 +305,6 @@ static void RenderPuzzle(Painter& painter,const std::string& font,const unsigned
 	}
 
 	FT_Done_FreeType(ftLibrary);
-
-	Image srcImage = image;
-	painter.DrawPuzzleGrid(srcImage,
-						   16.0f, //Border line width (px).
-						   4.0f, //Grid minor line width (px).
-						   8.0f, //Grid major line width (px).
-						   image);
-	srcImage = image;
-	painter.DrawWarpedAndUnwarpedPuzzle(srcImage,
-										1024, //Framebuffer width and height.
-										200.0f, //Perspective warp corner random radius.
-										0.15f, //Noise delta.
-										image, //Destination image.
-										144); //Destination image with and height.
 }
 
 static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
@@ -529,9 +516,26 @@ static void GenerateRandomPuzzle(Painter& painter,std::mt19937& randomNumberGene
 		digits.push_back(digitDist(randomNumberGenerator));
 	}
 
-	//Render the puzzle with a border, grid, and extra noise.
+	//Render the puzzle digits.
 	std::uniform_int_distribution<> fontSizeDist(48,64);
 	RenderPuzzle(painter,font,fontSizeDist(randomNumberGenerator),digits,puzzleImage);
+
+	//Draw a border and grid.
+	Image srcImage = puzzleImage;
+	painter.DrawPuzzleGrid(srcImage,
+						   16.0f, //Border line width (px).
+						   4.0f, //Grid minor line width (px).
+						   8.0f, //Grid major line width (px).
+						   puzzleImage);
+
+	//Add some noise and perform a random slight perspective warp.
+	srcImage = puzzleImage;
+	painter.DrawWarpedAndUnwarpedPuzzle(srcImage,
+										1024, //Framebuffer width and height.
+										200.0f, //Perspective warp corner random radius.
+										0.15f, //Noise delta.
+										puzzleImage, //Destination image.
+										144); //Destination image with and height.
 
 	//Preprocess the puzzle as a binary image to improve training speed and accuracy.
 	std::uniform_real_distribution<> aDist(2.0f,4.0f);
@@ -638,14 +642,17 @@ int __stdcall WinMain(void*,void*,void*,int)
 	Camera camera = Camera::Open("/dev/video0").value();
 	Image frame;
 	Image downscaledFrame;
-	Image* inputFrame = &frame;;
+	Image* inputFrame = &frame;
 	Image greyscaleFrame;
 	Image cannyFrame;
 	Canny canny = Canny::WithRadius(5.0f);
 	Image mergedFrame;
 	Image houghTransformFrame;
 	Image puzzleFrame;
+	Image displayPuzzleFrame;
+	Image solutionImage;
 	PuzzleFinder puzzleFinder;
+	CachedPuzzleSolver puzzleSolver;
 
 	while(!glfwWindowShouldClose(window))
 	{
@@ -689,33 +696,79 @@ int __stdcall WinMain(void*,void*,void*,int)
 								 puzzleFrame,
 								 PUZZLE_IMAGE_WIDTH,
 								 PUZZLE_IMAGE_HEIGHT);
+			displayPuzzleFrame = puzzleFrame;
+			PreprocessNeuralNetworkImage(displayPuzzleFrame,2.0f,255);
 		}
 
 		//Draw frame and extracted puzzle if available.
 		glViewport(0,0,windowWidth,windowHeight);
 		painter.DrawImage(drawImageX,drawImageY,drawImageWidth,drawImageHeight,mergedFrame);
-		painter.DrawImage(800,0,PUZZLE_DISPLAY_WIDTH,PUZZLE_DISPLAY_HEIGHT,puzzleFrame);
+		painter.DrawImage(800,0,PUZZLE_DISPLAY_WIDTH,PUZZLE_DISPLAY_HEIGHT,displayPuzzleFrame);
 
-		//Draw answer composite over puzzle if available.
+		//Draw solution composite over puzzle if available.
 		if(!puzzlePoints.empty())
 		{
+			//Cut puzzle into 9x9 chunks and run neural network on each to extract the respective
+			//digit.
 			std::vector<unsigned char> digits;
 			ExtractDigits(nn,puzzleFrame,digits);
 
-			//TODO: Generate answer texture here instead of using placeholder.
-			const Image answerImage = GeneratePlaceholderAnswerImage();
+			//Render the solution puzzle to a texture. It might fail if the puzzle doesn't have a
+			//solution or if the neural network made a mistake reading the digits. Then the last
+			//successful solution is used instead in hope that it's still correct.
+			std::vector<unsigned char> solution;
+			if(puzzleSolver.Solve(digits,solution) || puzzleSolver.GetLastUsedSolution(solution))
+			{
+				//Replace digits in the solution with zeros so the resulting texture doesn't draw
+				//over the original digits.
+				assert(digits.size() == solution.size());
+				for(unsigned int x = 0;x < digits.size();x++)
+				{
+					if(solution[x] == digits[x])
+						solution[x] = 0;
+				}
 
+				RenderPuzzle(painter,"/usr/share/fonts/oxygen/Oxygen-Sans.ttf",48,solution,solutionImage);
+			}
+			else
+				//Draw a placeholder to indicate that a puzzle was found even if it couldn't be
+				//used.
+				GeneratePlaceholderAnswerImage(solutionImage);
+
+			//Preprocess they greyscale image (with black text on a white background) so the
+			//numbers are green. This is part of a trick where we draw the image twice using
+			//blending so we don't have to add an alpha channel.
+			for(unsigned int x = 0;x < solutionImage.width * solutionImage.height;x++)
+			{
+				const unsigned int index = x * 3;
+				const unsigned char value = 255 - solutionImage.data[index];
+				const unsigned char invertedValue = 255 - value;
+				solutionImage.data[index + 0] = invertedValue;
+				solutionImage.data[index + 1] = value;
+				solutionImage.data[index + 2] = invertedValue;
+			}
+
+			//Render the solution texture right over the original puzzle.
 			glEnable(GL_BLEND);
-			glBlendEquationSeparate(GL_MAX,GL_MAX);
-			glBlendFuncSeparate(GL_SRC_COLOR,GL_DST_COLOR,GL_ONE,GL_ZERO);
 			for(Point& point : puzzlePoints)
 			{
 				point.x += drawImageX;
 				point.y += drawImageY;
 			}
 			assert(puzzlePoints.size() == 4);
-			painter.DrawImage(puzzlePoints[0],puzzlePoints[1],puzzlePoints[2],puzzlePoints[3],answerImage);
+
+			glColorMask(GL_FALSE,GL_TRUE,GL_FALSE,GL_FALSE);
+			glBlendEquationSeparate(GL_MAX,GL_MAX);
+			glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ZERO);
+			painter.DrawImage(puzzlePoints[0],puzzlePoints[1],puzzlePoints[2],puzzlePoints[3],solutionImage);
+
+			glColorMask(GL_TRUE,GL_FALSE,GL_TRUE,GL_FALSE);
+			glBlendEquationSeparate(GL_MIN,GL_MAX);
+			glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ONE,GL_ZERO);
+			painter.DrawImage(puzzlePoints[0],puzzlePoints[1],puzzlePoints[2],puzzlePoints[3],solutionImage);
+
 			glDisable(GL_BLEND);
+			glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 		}
 
 		//Draw debug info.

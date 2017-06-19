@@ -102,6 +102,27 @@ static bool NextOpenPosition(const Game& game,const unsigned int x,const unsigne
 	return false;
 }
 
+bool Solvable(Game game)
+{
+	for(unsigned int y = 0; y < Game::HEIGHT;y++)
+	{
+		for(unsigned int x = 0;x < Game::WIDTH;x++)
+		{
+			const unsigned char digit = game.Get(x,y);
+			if(digit == 0)
+				continue;
+
+			game.Set(x,y,0);
+			const std::set<unsigned char> choices = AvailableChoices(game,x,y);
+			if(choices.find(digit) == choices.end())
+				return false;
+			game.Set(x,y,digit);
+		}
+	}
+
+	return true;
+}
+
 bool Solve(Game& game)
 {
 	enum class MoveType

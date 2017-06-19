@@ -33,6 +33,7 @@ ENDIF()
 
 SET(SOURCE_FILES
 	src/sudoku_solver_ar.cpp
+	src/CachedPuzzleSolver.cpp
 	src/Camera.cpp
 	src/DeltaTimer.cpp
 	src/Game.cpp
