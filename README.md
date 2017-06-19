@@ -29,6 +29,7 @@ Requirements
 * [glm](http://glm.g-truc.net/) >= 0.9.8
 * mesa-libGL
 * mesa-libGLES
+* freetype[https://www.freetype.org/] >= 2.6
 
 Clone the source directory using:
 
@@ -64,6 +65,7 @@ Requirements
 * [GLEW](http://glew.sourceforge.net/) >= 2.0
 * [glm](http://glm.g-truc.net/) >= 0.9.8
 * [OpenGL ES 3.0 Headers](https://www.khronos.org/registry/OpenGL/index_es.php#headers3) (Make sure to get KHR/khrplatform.h on the same page)
+* freetype[https://www.freetype.org/] >= 2.6
 
 Clone or download source code from:
 
@@ -76,6 +78,11 @@ Run CMake in the resulting directory and configure the following variables:
 * **GLES3_INCLUDE_DIR**: OpenGL ES 3 include directory
 * **GLEW_INCLUDE_DIR**: GLEW include directory
 * **GLEW_LIBRARY_DIR**: GLEW library directory
+* **GLM_INCLUDE_DIR**: GLM include directory
+* **FREETYPE_INCLUDE_DIR_freetype2**: FreeType include directory
+* **FREETYPE_INCLUDE_DIR_ft2build**: Set to the same as FREETYPE_INCLUDE_DIR_freetype2
+* **FREETYPE_LIBRARY_DEBUG**: FreeType debug library
+* **FREETYPE_LIBRARY_RELEASE**: FreeType release library
 
 Open the `sudoku_solver_ar.sln` file in the build directory you selected with CMake. Then build and run using Visual Studio. Make sure to connect a supported webcam before running or else the program will fail to start.
 
