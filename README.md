@@ -11,10 +11,11 @@ All of the image processing and computer vision code is written from scratch and
 * [x] Line detection
 * [x] Puzzle detection
 * [x] Puzzle dewarp
-* [ ] OCR numbers
+* [X] OCR numbers
 * [x] Solve puzzle
 * [x] Render puzzle solution
 * [x] Composite solution over original puzzle
+* [ ] Increase Robustness
 
 ## Building and Running
 
