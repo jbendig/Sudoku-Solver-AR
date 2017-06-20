@@ -47,6 +47,7 @@ static bool drawLines = false;
 static bool drawLineClusters = false;
 static bool drawPossiblePuzzleLineClusters = false;
 static bool drawHoughTransform = false;
+static bool drawRandomPuzzle = false;
 
 void CheckGLError()
 {
@@ -629,6 +630,8 @@ void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
 		drawLineClusters = !drawLineClusters;
 	else if(key == GLFW_KEY_3)
 		drawPossiblePuzzleLineClusters = !drawPossiblePuzzleLineClusters;
+	else if(key == GLFW_KEY_4)
+		drawRandomPuzzle = !drawRandomPuzzle;
 }
 
 #ifdef __linux
@@ -808,6 +811,15 @@ int __stdcall WinMain(void*,void*,void*,int)
 				return MeanTheta(lhs) < MeanTheta(rhs);
 			});
 			DrawLineClusters(painter,drawImageX,drawImageY,drawImageWidth,drawImageHeight,puzzleFinder.possiblePuzzleLineClusters);
+		}
+		if(drawRandomPuzzle)
+		{
+			std::random_device randomDevice;
+			std::mt19937 randomNumberGenerator(randomDevice());
+
+			std::vector<unsigned char> digits;
+			GenerateRandomPuzzle(painter,randomNumberGenerator,displayPuzzleFrame,digits,255);
+			painter.DrawImage(800,0,PUZZLE_DISPLAY_WIDTH,PUZZLE_DISPLAY_HEIGHT,displayPuzzleFrame);
 		}
 		if(drawHoughTransform)
 			DrawHoughTransform(painter,windowWidth - 600,windowHeight,houghTransformFrame,0.75f);
