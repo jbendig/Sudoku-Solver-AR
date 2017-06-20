@@ -570,11 +570,13 @@ void HoughTransform(const Image& inputImage,Image& accumulationImage)
 {
     //Based on Digital Image Processing Third Edition. Chapter 10.2.7. Page 733.
 	//AccumulationImage is where the buckets for the hough transform are written to.
-	//X Axis: Angle evenly split up across [0,pi).
+	//X Axis: Angle evenly split up across [-pi/2,pi).
 	//Y Axis: Distance from origin split up across [0,diagonal length).
 	//Each pixel is the accumulation of the related input pixel's chance of being part of the line.
 	//The red channel and green channel are a machine native 16-bit unsigned integer total. The
 	//blue channel is unused.
+	//The X axis interval was chosen so that rho can represent all lines with a positive value and
+	//so we don't have to worry about angles being wrapped.
 
 	if(accumulationImage.width == 0 || accumulationImage.height == 0)
 	{
@@ -587,15 +589,14 @@ void HoughTransform(const Image& inputImage,Image& accumulationImage)
 
 	//Pre-calculate as much as possible to improve performance.
 	const float maxR = hypotf(inputImage.width,inputImage.height);
-	const float angleFMultiplier = M_PI / static_cast<float>(accumulationImage.width);
-	const float rMultiplier = static_cast<float>(accumulationImage.height) / 2.0f;
-	const float rTerm1Multiplier = rMultiplier / maxR;
+	const float angleFMultiplier = (3.0f * M_PI / 2.0f) / static_cast<float>(accumulationImage.width);
+	const float rMultiplier = static_cast<float>(accumulationImage.height) / maxR;
 
 	std::vector<float> cosAngles(accumulationImage.width);
 	std::vector<float> sinAngles(accumulationImage.width);
 	for(unsigned int x = 0;x < accumulationImage.width;x++)
 	{
-		const float angleF = static_cast<float>(x) * angleFMultiplier;
+		const float angleF = static_cast<float>(x) * angleFMultiplier - M_PI / 2.0f;
 		cosAngles[x] = cosf(angleF);
 		sinAngles[x] = sinf(angleF);
 	}
@@ -612,7 +613,9 @@ void HoughTransform(const Image& inputImage,Image& accumulationImage)
 			for(unsigned int z = 0;z < accumulationImage.width;z++)
 			{
 				float rf = static_cast<float>(x) * cosAngles[z] + static_cast<float>(y) * sinAngles[z];
-				rf = rf * rTerm1Multiplier + rMultiplier;
+				if(rf < 0.0f)
+					continue;
+				rf *= rMultiplier;
 				const unsigned int r = Clamp(static_cast<unsigned int>(rf),0u,accumulationImage.height - 1);
 
 				const unsigned int outputIndex = (r * accumulationImage.width + z) * 3;

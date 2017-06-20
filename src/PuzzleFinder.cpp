@@ -34,7 +34,7 @@ static void FindLines(const unsigned int targetWidth,
 
 	//Adjust radius based on how big the hough transform frame is. The 96.0f constant is arbitrary
 	//but seems to perform well.
-	const int radius = std::min(1l,std::lround(static_cast<float>(std::max(houghTransformFrame.width,houghTransformFrame.height)) / 96.0f));
+	const int radius = std::max(1l,std::lround(static_cast<float>(std::max(houghTransformFrame.width,houghTransformFrame.height)) / 96.0f));
 
 	//Make the minimum peak value 3/4th of the highest peak value. This is somewhat arbitrary as
 	//well but it out performs the statistical models I've tried.
@@ -45,7 +45,7 @@ static void FindLines(const unsigned int targetWidth,
 		const unsigned short value = *reinterpret_cast<const unsigned short*>(&houghTransformFrame.data[index]);
 		maximumValue = std::max(maximumValue,value);
 	}
-	const unsigned short minimumValue = maximumValue * 3 / 4;
+	const unsigned short minimumValue = maximumValue / 2;
 	if(minimumValue == 0)
 		return; //No lines.
 
@@ -86,18 +86,10 @@ static void FindLines(const unsigned int targetWidth,
 			if(peak)
 			{
 				//Convert peak into Hesse normal form theta and rho.
-				//TODO: Maybe simplify how rho is stored...
-				float theta = static_cast<float>(x) / static_cast<float>(houghTransformFrame.width) * M_PI;
-				const float rMultiplier = static_cast<float>(houghTransformFrame.height) / 2.0f;
-				const float maxR = hypotf(targetWidth,targetHeight);
-				float rho = (static_cast<float>(y) - rMultiplier) * maxR / rMultiplier;
-
-				//Make sure rho is always in a positive form to simplify working with the lines.
-				if(rho < 0.0f)
-				{
-					theta = fmodf(theta + M_PI,2 * M_PI);
-					rho *= -1.0f;
-				}
+				float theta = static_cast<float>(x) / static_cast<float>(houghTransformFrame.width) * 3.0f * M_PI / 2.0f - M_PI / 2.0f;
+				if(theta < 0.0f)
+					theta += 2.0f * M_PI;
+				const float rho = static_cast<float>(y) / static_cast<float>(houghTransformFrame.height) * hypotf(targetWidth,targetHeight);
 
 				lines.push_back({theta,rho});
 			}
