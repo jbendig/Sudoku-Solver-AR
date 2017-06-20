@@ -12,8 +12,10 @@
 #ifndef CACHEDPUZZLESOLVER_H
 #define CACHEDPUZZLESOLVER_H
 
+#include <future>
 #include <map>
 #include <vector>
+#include "Game.h"
 
 class CachedPuzzleSolver
 {
@@ -26,6 +28,9 @@ class CachedPuzzleSolver
 		using SolutionMap = std::map<std::vector<unsigned char>,std::vector<unsigned char>>;
 		SolutionMap solvedPuzzles;
 		SolutionMap::iterator lastUsedSolution;
+		std::vector<unsigned char> solvingDigits;
+		Game solvingGame;
+		std::future<bool> solvingFuture;
 };
 
 #endif

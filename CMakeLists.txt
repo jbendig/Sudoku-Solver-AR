@@ -52,7 +52,7 @@ SET(SOURCE_FILES
 ADD_EXECUTABLE(sudoku_solver_ar ${GUI_TYPE} ${SOURCE_FILES})
 IF(LINUX)
 	SET_TARGET_PROPERTIES(sudoku_solver_ar PROPERTIES COMPILE_FLAGS "-Wall -Wtype-limits -Woverloaded-virtual -msse2 -msse3 -msse4.2 -mavx -std=c++1z ${EXTRA_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw GL ${FREETYPE_LIBRARIES} gomp)
+	TARGET_LINK_LIBRARIES(sudoku_solver_ar glfw GL ${FREETYPE_LIBRARIES} gomp pthread)
 	ADD_CUSTOM_TARGET(run DEPENDS sudoku_solver_ar WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COMMAND "${CMAKE_BINARY_DIR}/sudoku_solver_ar" || true)
 	ADD_CUSTOM_TARGET(debug DEPENDS sudoku_solver_ar WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" COMMAND "gdb" "${CMAKE_BINARY_DIR}/sudoku_solver_ar" "-ex" "run" || true)
 ELSEIF(WIN32)
