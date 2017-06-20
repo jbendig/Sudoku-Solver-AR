@@ -37,9 +37,9 @@ static constexpr unsigned int PUZZLE_IMAGE_HEIGHT = PUZZLE_IMAGE_WIDTH;
 static constexpr unsigned int PUZZLE_DISPLAY_WIDTH = 600;
 static constexpr unsigned int PUZZLE_DISPLAY_HEIGHT = PUZZLE_DISPLAY_WIDTH;
 #ifdef __linux
-static constexpr char* PUZZLE_SOLUTION_FONT = "/usr/share/fonts/oxygen/Oxygen-Sans.ttf";
+static constexpr char PUZZLE_SOLUTION_FONT[] = "/usr/share/fonts/oxygen/Oxygen-Sans.ttf";
 #elif defined _WIN32
-static constexpr char* PUZZLE_SOLUTION_FONT = "C:/Windows/Fonts/times.ttf";
+static constexpr char PUZZLE_SOLUTION_FONT[] = "C:/Windows/Fonts/times.ttf";
 #else Platform not supported
 #endif
 
