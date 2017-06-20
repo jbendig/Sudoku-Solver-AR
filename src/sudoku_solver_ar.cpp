@@ -719,6 +719,8 @@ int __stdcall WinMain(void*,void*,void*,int)
 			PreprocessNeuralNetworkImage(displayPuzzleFrame,2.0f,255);
 		}
 
+		glClear(GL_COLOR_BUFFER_BIT);
+
 		//Draw frame and extracted puzzle if available.
 		glViewport(0,0,windowWidth,windowHeight);
 		painter.DrawImage(drawImageX,drawImageY,drawImageWidth,drawImageHeight,mergedFrame);
