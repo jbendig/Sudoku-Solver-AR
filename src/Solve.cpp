@@ -14,51 +14,141 @@
 #include <iterator>
 #include <set>
 #include <stack>
+#include <cassert>
 #include "Game.h"
 
-static std::set<unsigned char> InvertChoices(const std::set<unsigned char>& choices)
+
+namespace
 {
-	std::set<unsigned char> allChoices;
-	for(unsigned char x = 1;x <= Game::MAX_VALUE;x++)
-	{
-		allChoices.insert(x);
-	}
 
-	std::set<unsigned char> invertedChoices;
-	std::set_difference(allChoices.begin(),allChoices.end(),
-			choices.begin(),choices.end(),
-			std::inserter(invertedChoices,invertedChoices.end()));
+class Choices
+{
+	public:
+		class const_iterator
+		{
+			public:
+				const_iterator(const unsigned char* choices,const unsigned int index)
+					: choices(choices),
+					  index(index)
+				{
+					operator++();
+				}
+				const_iterator& operator++()
+				{
+					while(1)
+					{
+						index += 1;
+						if(index >= 10 || choices[index] != 0)
+							break;
+					}
 
-	return invertedChoices;
+					return *this;
+				}
+				bool operator==(const const_iterator& other) const
+				{
+					return index == other.index || (index >= 10 && other.index >= 10);
+				}
+				bool operator!=(const const_iterator& other) const
+				{
+					return !operator==(other);
+				}
+				unsigned char operator*() const
+				{
+					return index;
+				}
+			private:
+				const unsigned char* choices;
+				unsigned int index;
+		};
+
+		Choices()
+		{
+			std::fill(choices,choices + 10,0);
+		}
+
+		const_iterator begin() const
+		{
+			return const_iterator(choices,0);
+		}
+
+		const_iterator end() const
+		{
+			return const_iterator(choices,10);
+		}
+
+		void insert(const unsigned char choice)
+		{
+			assert(choice < 10);
+			choices[choice] = 1;
+		}
+
+		void remove(const unsigned char choice)
+		{
+			assert(choice < 10);
+			choices[choice] = 0;
+		}
+
+		bool contains(const unsigned char choice) const
+		{
+			assert(choice < 10);
+			return choices[choice] == 1;
+		}
+
+		Choices inverted() const
+		{
+			Choices invertedChoices;
+			for(unsigned int x = 1;x < 10;x++)
+			{
+				invertedChoices.choices[x] = choices[x] ^ 1;
+			}
+
+			return invertedChoices;
+		}
+
+		Choices intersection(const Choices& other) const
+		{
+			Choices intersectionChoices;
+			for(unsigned int x = 1;x < 10;x++)
+			{
+				if(choices[x] == 1 && other.choices[x] == 1)
+					intersectionChoices.choices[x] = 1;
+			}
+
+			return intersectionChoices;
+		}
+	private:
+		unsigned char choices[10];
+};
+
 }
 
-static std::set<unsigned char> AvailableHorizontalChoices(const Game& game,const unsigned int y)
+static Choices AvailableHorizontalChoices(const Game& game,const unsigned int y)
 {
-	std::set<unsigned char> unavailableChoices;
+	Choices unavailableChoices;
 	for(unsigned int x = 0;x < Game::WIDTH;x++)
 	{
 		unavailableChoices.insert(game.Get(x,y));
 	}
 
-	return InvertChoices(unavailableChoices);
+	return unavailableChoices.inverted();
 }
 
-static std::set<unsigned char> AvailableVerticalChoices(const Game& game,const unsigned int x)
+static Choices AvailableVerticalChoices(const Game& game,const unsigned int x)
 {
-	std::set<unsigned char> unavailableChoices;
+	Choices unavailableChoices;
 	for(unsigned int y = 0;y < Game::HEIGHT;y++)
 	{
 		unavailableChoices.insert(game.Get(x,y));
 	}
 
-	return InvertChoices(unavailableChoices);
+	return unavailableChoices.inverted();
 }
 
-static std::set<unsigned char> AvailableSquareChoices(const Game& game,const unsigned int x,const unsigned int y)
+static Choices AvailableSquareChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
 	const unsigned int squareStartX = (x / Game::BLOCK_WIDTH) * Game::BLOCK_WIDTH;
 	const unsigned int squareStartY = (y / Game::BLOCK_HEIGHT) * Game::BLOCK_HEIGHT;
-	std::set<unsigned char> unavailableChoices;
+	Choices unavailableChoices;
 	for(unsigned int y = 0;y < Game::BLOCK_HEIGHT;y++)
 	{
 		for(unsigned int x = 0;x < Game::BLOCK_WIDTH;x++)
@@ -67,24 +157,17 @@ static std::set<unsigned char> AvailableSquareChoices(const Game& game,const uns
 		}
 	}
 
-	return InvertChoices(unavailableChoices);
+	return unavailableChoices.inverted();
 }
 
-static std::set<unsigned char> AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
+static Choices AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
-	const std::set<unsigned char> hChoices = AvailableHorizontalChoices(game,y);
-	const std::set<unsigned char> vChoices = AvailableVerticalChoices(game,x);
-	const std::set<unsigned char> sChoices = AvailableSquareChoices(game,x,y);
+	const Choices hChoices = AvailableHorizontalChoices(game,y);
+	const Choices vChoices = AvailableVerticalChoices(game,x);
+	const Choices sChoices = AvailableSquareChoices(game,x,y);
 
-	std::set<unsigned char> hvChoices;
-	std::set_intersection(hChoices.begin(),hChoices.end(),
-			vChoices.begin(),vChoices.end(),
-			std::inserter(hvChoices,hvChoices.end()));
-
-	std::set<unsigned char> availableChoices;
-	std::set_intersection(hvChoices.begin(),hvChoices.end(),
-			sChoices.begin(),sChoices.end(),
-			std::inserter(availableChoices,availableChoices.end()));
+	const Choices hvChoices = hChoices.intersection(vChoices);
+	const Choices availableChoices = hvChoices.intersection(sChoices);
 
 	return availableChoices;
 }
@@ -113,8 +196,8 @@ bool Solvable(Game game)
 				continue;
 
 			game.Set(x,y,0);
-			const std::set<unsigned char> choices = AvailableChoices(game,x,y);
-			if(choices.find(digit) == choices.end())
+			const Choices choices = AvailableChoices(game,x,y);
+			if(!choices.contains(digit))
 				return false;
 			game.Set(x,y,digit);
 		}
@@ -141,7 +224,7 @@ bool Solve(Game& game)
 	auto PushMoves = [&](const unsigned int x,const unsigned int y) {
 		availableMoves.push({MoveType::Undo,0,0,Game::EMPTY_VALUE});
 
-		const std::set<unsigned char> availableChoices = AvailableChoices(game,x,y);
+		const Choices availableChoices = AvailableChoices(game,x,y);
 		for(const unsigned char choice : availableChoices)
 		{
 			availableMoves.push({MoveType::Move,x,y,choice});
