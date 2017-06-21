@@ -46,14 +46,16 @@ static std::vector<unsigned char> GameToDigits(const Game& game)
 }
 
 CachedPuzzleSolver::CachedPuzzleSolver()
-	: solvedPuzzles(),
-	  lastUsedSolution(solvedPuzzles.end())
+	: solvedPuzzles()
 {
 }
 
 bool CachedPuzzleSolver::Solve(const std::vector<unsigned char>& digits,std::vector<unsigned char>& solution)
 {
-	Game game = DigitsToGame(digits);
+	//Manage the recently used solutions. The oldest solution is always discarded with each call to
+	//this function UNLESS an exactly matched puzzle is found (and added to recently used
+	//solutions) AND the maximum number of recently used solutions has not been reached.
+	UpdateRecentlyUsedSolutions updateRecentlyUsedSolutions(recentlyUsedSolutions);
 
 	//Grab and cache results if a previous puzzle was solved since last call.
 	if(solvingFuture.valid() && solvingFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
@@ -61,7 +63,7 @@ bool CachedPuzzleSolver::Solve(const std::vector<unsigned char>& digits,std::vec
 		if(solvingFuture.get())
 		{
 			//Cache solution to save time and so it can be used when requested later.
-			solvedPuzzles[solvingDigits] = GameToDigits(solvingGame);
+			solvedPuzzles[solvingDigits] = {GameToDigits(solvingGame),0};
 		}
 	}
 
@@ -72,7 +74,9 @@ bool CachedPuzzleSolver::Solve(const std::vector<unsigned char>& digits,std::vec
 		return digit > 9;
 	}))
 		return false;
-	else if(!Solvable(game))
+
+	Game game = DigitsToGame(digits);
+	if(!Solvable(game))
 		return false;
 
 	//Does the puzzle have a solution that can be found in a reasonable amount of time?
@@ -86,14 +90,34 @@ bool CachedPuzzleSolver::Solve(const std::vector<unsigned char>& digits,std::vec
 	auto iter = solvedPuzzles.find(digits);
 	if(iter != solvedPuzzles.end())
 	{
-		solution = iter->second;
-		lastUsedSolution = iter;
+		solution = iter->second.digits;
+
+		updateRecentlyUsedSolutions.AddSolution(iter);
 		return true;
 	}
 
-	//If a puzzle is still being solved in the background, discard solve attempt. New puzzles should
-	//be infrequent enough that there is no reason to queue them up. This async solving just
-	//prevents the video from locking the GUI.
+	//If the most common recently used solution is a near match, assume that's the solution we
+	//want. This just means one or more digits were OCR'd incorrectly.
+	SolutionMap::const_iterator mostRecentlyUsedSolution;
+	if(GetMostLikelySolution(mostRecentlyUsedSolution))
+	{
+		unsigned int differentDigitCount = 0;
+		for(unsigned int x = 0;x < digits.size();x++)
+		{
+			if(digits[x] != mostRecentlyUsedSolution->first[x])
+				differentDigitCount += 1;
+		}
+
+		if(differentDigitCount < 4)
+		{
+			solution = mostRecentlyUsedSolution->second.digits;
+			return true;
+		}
+	}
+
+	//If a puzzle is currently being solved in the background, discard the requested solve attempt.
+	//New puzzles should be infrequent enough that there is no reason to queue them up. Finding the
+	//solution asynchronously prevents the video from locking the GUI.
 	if(solvingFuture.valid())
 		return false;
 
@@ -107,12 +131,58 @@ bool CachedPuzzleSolver::Solve(const std::vector<unsigned char>& digits,std::vec
 	return false;
 }
 
-bool CachedPuzzleSolver::GetLastUsedSolution(std::vector<unsigned char>& solution) const
+bool CachedPuzzleSolver::GetMostLikelySolution(std::vector<unsigned char>& solution) const
 {
-	if(lastUsedSolution == solvedPuzzles.end())
+	SolutionMap::const_iterator solutionIter;
+	if(!GetMostLikelySolution(solutionIter))
 		return false;
 
-	solution = lastUsedSolution->second;
+	solution = solutionIter->second.digits;
 	return true;
 }
 
+bool CachedPuzzleSolver::GetMostLikelySolution(SolutionMap::const_iterator& solutionIter) const
+{
+	std::deque<SolutionMap::iterator>::const_iterator mostRecentlyUsedSolution = std::max_element(recentlyUsedSolutions.cbegin(),recentlyUsedSolutions.cend(),[](const auto& lhs,const auto& rhs) {
+		return lhs->second.recentlyUsedCount < rhs->second.recentlyUsedCount;
+	});
+	if(mostRecentlyUsedSolution == recentlyUsedSolutions.cend())
+		return false;
+
+	solutionIter = *mostRecentlyUsedSolution;
+	return true;
+}
+
+CachedPuzzleSolver::UpdateRecentlyUsedSolutions::UpdateRecentlyUsedSolutions(std::deque<CachedPuzzleSolver::SolutionMap::iterator>& recentlyUsedSolutions)
+	: recentlyUsedSolutions(&recentlyUsedSolutions)
+{
+}
+
+CachedPuzzleSolver::UpdateRecentlyUsedSolutions::~UpdateRecentlyUsedSolutions()
+{
+	PopSolution();
+}
+
+void CachedPuzzleSolver::UpdateRecentlyUsedSolutions::AddSolution(CachedPuzzleSolver::SolutionMap::iterator& iter)
+{
+	constexpr unsigned int MAXIMUM_RECENTLY_USED_SOLUTIONS = 10;
+
+	if(recentlyUsedSolutions == nullptr)
+		return;
+
+	iter->second.recentlyUsedCount += 1;
+	recentlyUsedSolutions->push_back(iter);
+	if(recentlyUsedSolutions->size() > MAXIMUM_RECENTLY_USED_SOLUTIONS)
+		PopSolution();
+	recentlyUsedSolutions = nullptr;
+}
+
+void CachedPuzzleSolver::UpdateRecentlyUsedSolutions::PopSolution()
+{
+	if(recentlyUsedSolutions == nullptr || recentlyUsedSolutions->empty())
+		return;
+
+	recentlyUsedSolutions->front()->second.recentlyUsedCount -= 1;
+	recentlyUsedSolutions->pop_front();
+	recentlyUsedSolutions = nullptr;
+}

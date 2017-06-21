@@ -12,6 +12,7 @@
 #ifndef CACHEDPUZZLESOLVER_H
 #define CACHEDPUZZLESOLVER_H
 
+#include <deque>
 #include <future>
 #include <map>
 #include <vector>
@@ -23,14 +24,34 @@ class CachedPuzzleSolver
 		CachedPuzzleSolver();
 
 		bool Solve(const std::vector<unsigned char>& digits,std::vector<unsigned char>& solution);
-		bool GetLastUsedSolution(std::vector<unsigned char>& solution) const;
+		bool GetMostLikelySolution(std::vector<unsigned char>& solution) const;
 	private:
-		using SolutionMap = std::map<std::vector<unsigned char>,std::vector<unsigned char>>;
+		struct Solution
+		{
+			std::vector<unsigned char> digits;
+			unsigned int recentlyUsedCount;
+		};
+		using SolutionMap = std::map<std::vector<unsigned char>,Solution>;
+		class UpdateRecentlyUsedSolutions
+		{
+			public:
+				UpdateRecentlyUsedSolutions(std::deque<CachedPuzzleSolver::SolutionMap::iterator>& recentlyUsedSolutions);
+				~UpdateRecentlyUsedSolutions();
+
+				void AddSolution(CachedPuzzleSolver::SolutionMap::iterator& iter);
+			private:
+				std::deque<CachedPuzzleSolver::SolutionMap::iterator>* recentlyUsedSolutions;
+
+				void PopSolution();
+		};
+
 		SolutionMap solvedPuzzles;
-		SolutionMap::iterator lastUsedSolution;
+		std::deque<SolutionMap::iterator> recentlyUsedSolutions;
 		std::vector<unsigned char> solvingDigits;
 		Game solvingGame;
 		std::future<bool> solvingFuture;
+
+		bool GetMostLikelySolution(SolutionMap::const_iterator& solutionIter) const;
 };
 
 #endif

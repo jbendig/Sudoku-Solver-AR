@@ -738,10 +738,11 @@ int __stdcall WinMain(void*,void*,void*,int)
 			ExtractDigits(nn,puzzleFrame,digits);
 
 			//Render the solution puzzle to a texture. It might fail if the puzzle doesn't have a
-			//solution or if the neural network made a mistake reading the digits. Then the last
-			//successful solution is used instead in hope that it's still correct.
+			//solution or if the neural network made a mistake reading the digits. Then, the most
+			//common of the recently used solutions is used instead because it's probably still
+			//correct.
 			std::vector<unsigned char> solution;
-			if(puzzleSolver.Solve(digits,solution) || puzzleSolver.GetLastUsedSolution(solution))
+			if(puzzleSolver.Solve(digits,solution) || puzzleSolver.GetMostLikelySolution(solution))
 			{
 				//Replace digits in the solution with zeros so the resulting texture doesn't draw
 				//over the original digits.
