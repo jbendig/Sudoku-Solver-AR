@@ -353,6 +353,32 @@ static void ExtractPuzzleTiles(const Image& image,std::vector<Image>& tiles)
 	}
 }
 
+static void MergePuzzleTiles(Image& image,const std::vector<Image>& tiles)
+{
+	assert(tiles.size() == 81);
+
+	image.width = tiles[0].width * 9;
+	image.height = tiles[0].height * 9;
+	image.data.resize(image.width * image.height * 3);
+
+	for(unsigned int y = 0;y < 9;y++)
+	{
+		for(unsigned int x = 0;x < 9;x++)
+		{
+			const unsigned int tileIndex = y * 9 + x;
+			const Image& tileImage = tiles[tileIndex];
+
+			const unsigned int span = tileImage.width * 3;
+			for(unsigned int row = 0;row < tileImage.height;row++)
+			{
+				const unsigned int inputIndex = row * tileImage.width * 3;
+				const unsigned int outputIndex = (((row + y * tileImage.height) * image.width) + x * tileImage.width) * 3;
+				memcpy(&image.data[outputIndex],&tileImage.data[inputIndex],span);
+			}
+		}
+	}
+}
+
 static void PreprocessNeuralNetworkImage(Image& image,const float a,const unsigned char binaryHigh)
 {
 	if(image.width == 0 || image.height == 0)
@@ -718,8 +744,14 @@ int __stdcall WinMain(void*,void*,void*,int)
 								 puzzleFrame,
 								 PUZZLE_IMAGE_WIDTH,
 								 PUZZLE_IMAGE_HEIGHT);
-			displayPuzzleFrame = puzzleFrame;
-			PreprocessNeuralNetworkImage(displayPuzzleFrame,2.0f,255);
+
+			std::vector<Image> puzzleTiles;
+			ExtractPuzzleTiles(puzzleFrame,puzzleTiles);
+			for(Image& puzzleTile : puzzleTiles)
+			{
+				PreprocessNeuralNetworkImage(puzzleTile,2.0f,255);
+			}
+			MergePuzzleTiles(displayPuzzleFrame,puzzleTiles);
 		}
 
 		glClear(GL_COLOR_BUFFER_BIT);
