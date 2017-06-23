@@ -105,16 +105,15 @@ class Choices
 			return invertedChoices;
 		}
 
-		Choices intersection(const Choices& other) const
+		Choices joined(const Choices& other) const
 		{
-			Choices intersectionChoices;
+			Choices joinedChoices;
 			for(unsigned int x = 1;x < 10;x++)
 			{
-				if(choices[x] == 1 && other.choices[x] == 1)
-					intersectionChoices.choices[x] = 1;
+				joinedChoices.choices[x] = choices[x] | other.choices[x];
 			}
 
-			return intersectionChoices;
+			return joinedChoices;
 		}
 	private:
 		unsigned char choices[10];
@@ -122,7 +121,7 @@ class Choices
 
 }
 
-static Choices AvailableHorizontalChoices(const Game& game,const unsigned int y)
+static Choices UnavailableHorizontalChoices(const Game& game,const unsigned int y)
 {
 	Choices unavailableChoices;
 	for(unsigned int x = 0;x < Game::WIDTH;x++)
@@ -130,10 +129,10 @@ static Choices AvailableHorizontalChoices(const Game& game,const unsigned int y)
 		unavailableChoices.insert(game.Get(x,y));
 	}
 
-	return unavailableChoices.inverted();
+	return unavailableChoices;
 }
 
-static Choices AvailableVerticalChoices(const Game& game,const unsigned int x)
+static Choices UnavailableVerticalChoices(const Game& game,const unsigned int x)
 {
 	Choices unavailableChoices;
 	for(unsigned int y = 0;y < Game::HEIGHT;y++)
@@ -141,10 +140,10 @@ static Choices AvailableVerticalChoices(const Game& game,const unsigned int x)
 		unavailableChoices.insert(game.Get(x,y));
 	}
 
-	return unavailableChoices.inverted();
+	return unavailableChoices;
 }
 
-static Choices AvailableSquareChoices(const Game& game,const unsigned int x,const unsigned int y)
+static Choices UnavailableBlockChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
 	const unsigned int squareStartX = (x / Game::BLOCK_WIDTH) * Game::BLOCK_WIDTH;
 	const unsigned int squareStartY = (y / Game::BLOCK_HEIGHT) * Game::BLOCK_HEIGHT;
@@ -157,19 +156,19 @@ static Choices AvailableSquareChoices(const Game& game,const unsigned int x,cons
 		}
 	}
 
-	return unavailableChoices.inverted();
+	return unavailableChoices;
 }
 
 static Choices AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
-	const Choices hChoices = AvailableHorizontalChoices(game,y);
-	const Choices vChoices = AvailableVerticalChoices(game,x);
-	const Choices sChoices = AvailableSquareChoices(game,x,y);
+	const Choices hChoices = UnavailableHorizontalChoices(game,y);
+	const Choices vChoices = UnavailableVerticalChoices(game,x);
+	const Choices bChoices = UnavailableBlockChoices(game,x,y);
 
-	const Choices hvChoices = hChoices.intersection(vChoices);
-	const Choices availableChoices = hvChoices.intersection(sChoices);
+	const Choices hvChoices = hChoices.joined(vChoices);
+	const Choices unavailableChoices = hvChoices.joined(bChoices);
 
-	return availableChoices;
+	return unavailableChoices.inverted();
 }
 
 static bool NextOpenPosition(const Game& game,const unsigned int x,const unsigned int y,unsigned int& nextX,unsigned int& nextY)
