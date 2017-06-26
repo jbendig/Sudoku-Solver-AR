@@ -12,7 +12,6 @@
 #include "Solve.h"
 #include <algorithm>
 #include <iterator>
-#include <set>
 #include <stack>
 #include <cassert>
 #include "Game.h"
@@ -21,49 +20,55 @@
 namespace
 {
 
-class Choices
+class DigitSet
 {
 	public:
+		static constexpr unsigned int MAXIMUM_SIZE = 10;
+
 		class const_iterator
 		{
 			public:
-				const_iterator(const unsigned char* choices,const unsigned int index)
+				const_iterator(const std::array<unsigned char,MAXIMUM_SIZE>& choices,const unsigned int index)
 					: choices(choices),
 					  index(index)
 				{
 					operator++();
 				}
+
 				const_iterator& operator++()
 				{
 					while(1)
 					{
 						index += 1;
-						if(index >= 10 || choices[index] != 0)
+						if(index >= choices.size() || choices[index] != Game::EMPTY_VALUE)
 							break;
 					}
 
 					return *this;
 				}
+
 				bool operator==(const const_iterator& other) const
 				{
-					return index == other.index || (index >= 10 && other.index >= 10);
+					return index == other.index || (index >= choices.size() && other.index >= choices.size());
 				}
+
 				bool operator!=(const const_iterator& other) const
 				{
 					return !operator==(other);
 				}
+
 				unsigned char operator*() const
 				{
 					return index;
 				}
 			private:
-				const unsigned char* choices;
+				const std::array<unsigned char,MAXIMUM_SIZE>& choices;
 				unsigned int index;
 		};
 
-		Choices()
+		DigitSet()
 		{
-			std::fill(choices,choices + 10,0);
+			std::fill(choices.begin(),choices.end(),Game::EMPTY_VALUE);
 		}
 
 		const_iterator begin() const
@@ -73,81 +78,57 @@ class Choices
 
 		const_iterator end() const
 		{
-			return const_iterator(choices,10);
+			return const_iterator(choices,choices.size());
 		}
 
 		void insert(const unsigned char choice)
 		{
-			assert(choice < 10);
+			assert(choice < choices.size());
 			choices[choice] = 1;
-		}
-
-		void remove(const unsigned char choice)
-		{
-			assert(choice < 10);
-			choices[choice] = 0;
 		}
 
 		bool contains(const unsigned char choice) const
 		{
-			assert(choice < 10);
+			assert(choice < choices.size());
 			return choices[choice] == 1;
 		}
 
-		Choices inverted() const
+		DigitSet complemented() const
 		{
-			Choices invertedChoices;
-			for(unsigned int x = 1;x < 10;x++)
+			DigitSet complementedDigitSet;
+			for(unsigned int x = 1;x < choices.size();x++)
 			{
-				invertedChoices.choices[x] = choices[x] ^ 1;
+				complementedDigitSet.choices[x] = choices[x] ^ 1;
 			}
 
-			return invertedChoices;
-		}
-
-		Choices joined(const Choices& other) const
-		{
-			Choices joinedChoices;
-			for(unsigned int x = 1;x < 10;x++)
-			{
-				joinedChoices.choices[x] = choices[x] | other.choices[x];
-			}
-
-			return joinedChoices;
+			return complementedDigitSet;
 		}
 	private:
-		unsigned char choices[10];
+		std::array<unsigned char,MAXIMUM_SIZE> choices;
 };
 
 }
 
-static Choices UnavailableHorizontalChoices(const Game& game,const unsigned int y)
+static void UnavailableHorizontalChoices(const Game& game,const unsigned int y,DigitSet& unavailableChoices)
 {
-	Choices unavailableChoices;
 	for(unsigned int x = 0;x < Game::WIDTH;x++)
 	{
 		unavailableChoices.insert(game.Get(x,y));
 	}
-
-	return unavailableChoices;
 }
 
-static Choices UnavailableVerticalChoices(const Game& game,const unsigned int x)
+static void UnavailableVerticalChoices(const Game& game,const unsigned int x,DigitSet& unavailableChoices)
 {
-	Choices unavailableChoices;
 	for(unsigned int y = 0;y < Game::HEIGHT;y++)
 	{
 		unavailableChoices.insert(game.Get(x,y));
 	}
-
-	return unavailableChoices;
 }
 
-static Choices UnavailableBlockChoices(const Game& game,const unsigned int x,const unsigned int y)
+static void UnavailableBlockChoices(const Game& game,const unsigned int x,const unsigned int y,DigitSet& unavailableChoices)
 {
 	const unsigned int squareStartX = (x / Game::BLOCK_WIDTH) * Game::BLOCK_WIDTH;
 	const unsigned int squareStartY = (y / Game::BLOCK_HEIGHT) * Game::BLOCK_HEIGHT;
-	Choices unavailableChoices;
 	for(unsigned int y = 0;y < Game::BLOCK_HEIGHT;y++)
 	{
 		for(unsigned int x = 0;x < Game::BLOCK_WIDTH;x++)
@@ -155,20 +136,16 @@ static Choices UnavailableBlockChoices(const Game& game,const unsigned int x,con
 			unavailableChoices.insert(game.Get(squareStartX + x,squareStartY + y));
 		}
 	}
-
-	return unavailableChoices;
 }
 
-static Choices AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
+static DigitSet AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
-	const Choices hChoices = UnavailableHorizontalChoices(game,y);
-	const Choices vChoices = UnavailableVerticalChoices(game,x);
-	const Choices bChoices = UnavailableBlockChoices(game,x,y);
+	DigitSet unavailableChoices;
+	UnavailableHorizontalChoices(game,y,unavailableChoices);
+	UnavailableVerticalChoices(game,x,unavailableChoices);
+	UnavailableBlockChoices(game,x,y,unavailableChoices);
 
-	const Choices hvChoices = hChoices.joined(vChoices);
-	const Choices unavailableChoices = hvChoices.joined(bChoices);
-
-	return unavailableChoices.inverted();
+	return unavailableChoices.complemented();
 }
 
 static bool NextOpenPosition(const Game& game,const unsigned int x,const unsigned int y,unsigned int& nextX,unsigned int& nextY)
@@ -195,7 +172,7 @@ bool Solvable(Game game)
 				continue;
 
 			game.Set(x,y,0);
-			const Choices choices = AvailableChoices(game,x,y);
+			const DigitSet choices = AvailableChoices(game,x,y);
 			if(!choices.contains(digit))
 				return false;
 			game.Set(x,y,digit);
@@ -207,26 +184,27 @@ bool Solvable(Game game)
 
 bool Solve(Game& game)
 {
-	enum class MoveType
+	//State for DFS used to determine whether we are searching forward (Set) or backtracking
+	//(Clear).
+	enum class GuessType
 	{
-		Move,
-		Undo
+		Set,
+		Clear
 	};
-	struct Move
+	struct Guess
 	{
-		MoveType type;
+		GuessType type;
 		unsigned int x;
 		unsigned int y;
 		unsigned char value;
 	};
-	std::stack<Move> availableMoves;
-	auto PushMoves = [&](const unsigned int x,const unsigned int y) {
-		availableMoves.push({MoveType::Undo,0,0,Game::EMPTY_VALUE});
+	std::stack<Guess> availableGuesses;
 
-		const Choices availableChoices = AvailableChoices(game,x,y);
+	auto PushAvailableGuesses = [&](const unsigned int x,const unsigned int y) {
+		const DigitSet availableChoices = AvailableChoices(game,x,y);
 		for(const unsigned char choice : availableChoices)
 		{
-			availableMoves.push({MoveType::Move,x,y,choice});
+			availableGuesses.push({GuessType::Set,x,y,choice});
 		}
 	};
 
@@ -238,36 +216,33 @@ bool Solve(Game& game)
 		if(!NextOpenPosition(game,0,0,positionX,positionY))
 			return true; //No open positions, already solved?
 	}
-	PushMoves(positionX,positionY);
+	PushAvailableGuesses(positionX,positionY);
 
 	//Perform DFS until game is solved.
-	std::stack<Move> appliedMoves;
-	while(!availableMoves.empty())
+	while(!availableGuesses.empty())
 	{
-		const Move move = availableMoves.top();
-		availableMoves.pop();
-		if(move.type == MoveType::Undo)
+		Guess guess = availableGuesses.top();
+		availableGuesses.pop();
+
+		if(guess.type == GuessType::Set)
 		{
-			if(appliedMoves.empty())
-				break; //No moves applied, out of possible moves.
+			game.Set(guess.x,guess.y,guess.value);
 
-			const Move appliedMove = appliedMoves.top();
-			appliedMoves.pop();
-			game.Set(appliedMove.x,appliedMove.y,Game::EMPTY_VALUE);
-			continue;
+			//Replace Set with a Clear so it can be undone if a solution isn't found.
+			guess.type = GuessType::Clear;
+			availableGuesses.push(guess);
 
+			unsigned int nextX = 0;
+			unsigned int nextY = 0;
+			if(!NextOpenPosition(game,guess.x,guess.y,nextX,nextY))
+				return true; //No more open positions, game solved!
+
+			PushAvailableGuesses(nextX,nextY);
 		}
-		game.Set(move.x,move.y,move.value);
-		appliedMoves.push(move);
-
-		unsigned int nextX = 0;
-		unsigned int nextY = 0;
-		if(!NextOpenPosition(game,move.x,move.y,nextX,nextY))
-			return true; //No more open positions, game solved!
-
-		PushMoves(nextX,nextY);
+		else //if(guess.type == GuessType::Clear)
+			game.Set(guess.x,guess.y,Game::EMPTY_VALUE);
 	}
 
-	//Out of possible moves, cannot be solved.
+	//Out of possible guesses, cannot be solved.
 	return false;
 }

@@ -12,7 +12,7 @@
 #ifndef GAME_H
 #define GAME_H
 
-#include <vector>
+#include <array>
 
 class Game
 {
@@ -29,9 +29,9 @@ class Game
 		void Clear();
 		bool Set(const unsigned int x,const unsigned int y,const unsigned char value);
 		unsigned char Get(const unsigned int x,const unsigned int y) const;
-		void Print();
+		void Print() const;
 	private:
-		std::vector<unsigned char> state;
+		std::array<unsigned char,WIDTH * HEIGHT> state;
 };
 
 #endif

@@ -18,7 +18,7 @@ static unsigned int Index(const unsigned int x,const unsigned int y)
 }
 
 Game::Game()
- : state(Game::WIDTH * Game::HEIGHT)
+ : state()
 {
 	Clear();
 }
@@ -46,7 +46,7 @@ unsigned char Game::Get(const unsigned int x,const unsigned int y) const
 	return state[Index(x,y)];
 }
 
-void Game::Print()
+void Game::Print() const
 {
 	auto PrintHorizontalDivider = []() {
 		for(unsigned int x = 0;x < (Game::WIDTH + (Game::WIDTH / Game::BLOCK_WIDTH) + 1);x++)
