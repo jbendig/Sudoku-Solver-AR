@@ -30,7 +30,7 @@ void Game::Clear()
 
 bool Game::Set(const unsigned int x,const unsigned int y,const unsigned char value)
 {
-	if(x >= Game::WIDTH || y >= Game::HEIGHT || (value - 1) >= Game::MAX_VALUE)
+	if(x >= Game::WIDTH || y >= Game::HEIGHT || value > Game::MAX_VALUE)
 		return false;
 
 	state[Index(x,y)] = value;
