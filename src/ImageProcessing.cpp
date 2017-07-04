@@ -396,16 +396,10 @@ void Gaussian(const Image& inputImage,Image& outputImage,const float radius)
 	outputImage.MatchSize(inputImage);
 
 	auto GaussianKernel = [](const float radius,unsigned int& weightRadius,unsigned int& weightCount) {
-		auto GaussianCook = [](const float x,const float radius,const float sigma) {
-			//From Real-Time Rendering page 470.
-			if(x > radius)
-				return 0.0f;
-
+		auto Gaussian = [](const float x,const float sigma) {
 			const float x2 = x * x;
-			const float radius2 = radius * radius;
 			const float sigma2 = sigma * sigma;
-			const float sigma2Times2 = sigma2 * 2.0f;
-			return expf(-(x2 / sigma2Times2)) - expf(-(radius2 / sigma2Times2));
+			return expf(-x2 / (2.0f * sigma2));
 		};
 
 		const float sigma = radius / 3.0f; //Somewhat arbitrary but dependent on radius.
@@ -416,7 +410,7 @@ void Gaussian(const Image& inputImage,Image& outputImage,const float radius)
 		float sum = 0.0f;
 		for(unsigned int x = 0;x < weightCount;x++)
 		{
-			const float weight = GaussianCook(static_cast<float>(x) - static_cast<float>(weightRadius),radius,sigma);
+			const float weight = Gaussian(static_cast<float>(x) - static_cast<float>(weightRadius),sigma);
 			weights[x] = weight;
 			sum += weight;
 		}
@@ -424,7 +418,7 @@ void Gaussian(const Image& inputImage,Image& outputImage,const float radius)
 		const float oneOverSum = 1.0f / sum;
 		for(float& weight : weights)
 		{
-			weight = std::max(0.0f,weight * oneOverSum);
+			weight *= oneOverSum;
 		}
 
 		return weights;
