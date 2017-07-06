@@ -12,7 +12,7 @@
 #include "Solve.h"
 #include <algorithm>
 #include <iterator>
-#include <stack>
+#include <limits>
 #include <cassert>
 #include "Game.h"
 
@@ -40,7 +40,7 @@ class DigitSet
 					while(1)
 					{
 						index += 1;
-						if(index >= choices.size() || choices[index] != Game::EMPTY_VALUE)
+						if(index >= choices.size() || choices[index] != 0)
 							break;
 					}
 
@@ -68,7 +68,7 @@ class DigitSet
 
 		DigitSet()
 		{
-			std::fill(choices.begin(),choices.end(),Game::EMPTY_VALUE);
+			std::fill(choices.begin(),choices.end(),0);
 		}
 
 		const_iterator begin() const
@@ -109,7 +109,7 @@ class DigitSet
 
 }
 
-static void UnavailableHorizontalChoices(const Game& game,const unsigned int y,DigitSet& unavailableChoices)
+static void UnavailableRowChoices(const Game& game,const unsigned int y,DigitSet& unavailableChoices)
 {
 	for(unsigned int x = 0;x < Game::WIDTH;x++)
 	{
@@ -117,7 +117,7 @@ static void UnavailableHorizontalChoices(const Game& game,const unsigned int y,D
 	}
 }
 
-static void UnavailableVerticalChoices(const Game& game,const unsigned int x,DigitSet& unavailableChoices)
+static void UnavailableColumnChoices(const Game& game,const unsigned int x,DigitSet& unavailableChoices)
 {
 	for(unsigned int y = 0;y < Game::HEIGHT;y++)
 	{
@@ -127,13 +127,13 @@ static void UnavailableVerticalChoices(const Game& game,const unsigned int x,Dig
 
 static void UnavailableBlockChoices(const Game& game,const unsigned int x,const unsigned int y,DigitSet& unavailableChoices)
 {
-	const unsigned int squareStartX = (x / Game::BLOCK_WIDTH) * Game::BLOCK_WIDTH;
-	const unsigned int squareStartY = (y / Game::BLOCK_HEIGHT) * Game::BLOCK_HEIGHT;
+	const unsigned int blockStartX = (x / Game::BLOCK_WIDTH) * Game::BLOCK_WIDTH;
+	const unsigned int blockStartY = (y / Game::BLOCK_HEIGHT) * Game::BLOCK_HEIGHT;
 	for(unsigned int y = 0;y < Game::BLOCK_HEIGHT;y++)
 	{
 		for(unsigned int x = 0;x < Game::BLOCK_WIDTH;x++)
 		{
-			unavailableChoices.insert(game.Get(squareStartX + x,squareStartY + y));
+			unavailableChoices.insert(game.Get(blockStartX + x,blockStartY + y));
 		}
 	}
 }
@@ -141,16 +141,16 @@ static void UnavailableBlockChoices(const Game& game,const unsigned int x,const 
 static DigitSet AvailableChoices(const Game& game,const unsigned int x,const unsigned int y)
 {
 	DigitSet unavailableChoices;
-	UnavailableHorizontalChoices(game,y,unavailableChoices);
-	UnavailableVerticalChoices(game,x,unavailableChoices);
+	UnavailableRowChoices(game,y,unavailableChoices);
+	UnavailableColumnChoices(game,x,unavailableChoices);
 	UnavailableBlockChoices(game,x,y,unavailableChoices);
 
 	return unavailableChoices.complemented();
 }
 
-static bool NextOpenPosition(const Game& game,const unsigned int x,const unsigned int y,unsigned int& nextX,unsigned int& nextY)
+static bool NextOpenPosition(const Game& game,const unsigned int lastX,const unsigned int lastY,unsigned int& nextX,unsigned int& nextY)
 {
-	for(unsigned int index = y * Game::WIDTH + x + 1;index < (Game::WIDTH * Game::HEIGHT);index++)
+	for(unsigned int index = lastY * Game::WIDTH + lastX + 1;index < (Game::WIDTH * Game::HEIGHT);index++)
 	{
 		nextX = index % Game::WIDTH;
 		nextY = index / Game::HEIGHT;
@@ -182,67 +182,40 @@ bool Solvable(Game game)
 	return true;
 }
 
-bool Solve(Game& game)
+static bool SolveNext(Game& game,const unsigned int lastX,const unsigned int lastY)
 {
-	//State for DFS used to determine whether we are searching forward (Set) or backtracking
-	//(Clear).
-	enum class GuessType
-	{
-		Set,
-		Clear
-	};
-	struct Guess
-	{
-		GuessType type;
-		unsigned int x;
-		unsigned int y;
-		unsigned char value;
-	};
-	std::stack<Guess> availableGuesses;
-
-	auto PushAvailableGuesses = [&](const unsigned int x,const unsigned int y) {
-		const DigitSet availableChoices = AvailableChoices(game,x,y);
-		for(const unsigned char choice : availableChoices)
-		{
-			availableGuesses.push({GuessType::Set,x,y,choice});
-		}
-	};
-
-	//Find first open position.
+	//Find the next position in the puzzle without a digit.
 	unsigned int positionX = 0;
 	unsigned int positionY = 0;
-	if(game.Get(0,0) != Game::EMPTY_VALUE)
+	if(!NextOpenPosition(game,lastX,lastY,positionX,positionY))
+		return true; //No open positions, already solved?
+
+	//Get the set of possible digits for this position.
+	const DigitSet availableChoices = AvailableChoices(game,positionX,positionY);
+	for(const unsigned char choice : availableChoices)
 	{
-		if(!NextOpenPosition(game,0,0,positionX,positionY))
-			return true; //No open positions, already solved?
-	}
-	PushAvailableGuesses(positionX,positionY);
+		//Try this digit.
+		game.Set(positionX,positionY,choice);
 
-	//Perform DFS until game is solved.
-	while(!availableGuesses.empty())
-	{
-		Guess guess = availableGuesses.top();
-		availableGuesses.pop();
-
-		if(guess.type == GuessType::Set)
-		{
-			game.Set(guess.x,guess.y,guess.value);
-
-			//Replace Set with a Clear so it can be undone if a solution isn't found.
-			guess.type = GuessType::Clear;
-			availableGuesses.push(guess);
-
-			unsigned int nextX = 0;
-			unsigned int nextY = 0;
-			if(!NextOpenPosition(game,guess.x,guess.y,nextX,nextY))
-				return true; //No more open positions, game solved!
-
-			PushAvailableGuesses(nextX,nextY);
-		}
-		else //if(guess.type == GuessType::Clear)
-			game.Set(guess.x,guess.y,Game::EMPTY_VALUE);
+		//Recursively keep searching at the next open position.
+		if(SolveNext(game,positionX,positionY))
+			return true;
 	}
 
-	//Out of possible guesses, cannot be solved.
+	//None of the attempted digits for this position were correct, clear it before backtracking so
+	//it doesn't incorrectly influence other paths.
+	game.Set(positionX,positionY,Game::EMPTY_VALUE);
+
 	return false;
 }
+
+bool Solve(Game& game)
+{
+	//Use an overflow to start solving at (0,0).
+	const unsigned int lastX = std::numeric_limits<unsigned int>::max();
+	const unsigned int lastY = 0;
+
+	//Recursively search for a solution in depth-first order.
+	return SolveNext(game,lastX,lastY);
+}
+
