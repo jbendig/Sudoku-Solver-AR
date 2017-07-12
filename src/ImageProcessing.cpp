@@ -575,8 +575,8 @@ void HoughTransform(const Image& inputImage,Image& accumulationImage)
 	if(accumulationImage.width == 0 || accumulationImage.height == 0)
 	{
 		//Sane defaults based off of Image Processing: The Fundamentals Chapter 5. Page 520.
-		accumulationImage.width = 360;
-		accumulationImage.height = std::min(inputImage.width,inputImage.height);
+		accumulationImage.width = 360 * 2;
+		accumulationImage.height = std::min(inputImage.width,inputImage.height) * 2;
 	}
 	accumulationImage.data.resize(accumulationImage.width * accumulationImage.height * 3);
 	std::fill(accumulationImage.data.begin(),accumulationImage.data.end(),0);
