@@ -93,6 +93,7 @@ Camera support is currently extremely limited. Only cameras that output the foll
 | **Linux** | **Windows** |
 |-----------|-------------|
 | YUV 4:2:2 | NV12        |
+|           | RGB24       |
 
 ## Licensing
 
