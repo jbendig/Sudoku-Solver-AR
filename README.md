@@ -29,7 +29,7 @@ Requirements
 * [glm](http://glm.g-truc.net/) >= 0.9.8
 * mesa-libGL
 * mesa-libGLES
-* freetype[https://www.freetype.org/] >= 2.6
+* [freetype](https://www.freetype.org/) >= 2.6
 
 Clone the source directory using:
 
@@ -65,7 +65,7 @@ Requirements
 * [GLEW](http://glew.sourceforge.net/) >= 2.0
 * [glm](http://glm.g-truc.net/) >= 0.9.8
 * [OpenGL ES 3.0 Headers](https://www.khronos.org/registry/OpenGL/index_es.php#headers3) (Make sure to get KHR/khrplatform.h on the same page)
-* freetype[https://www.freetype.org/] >= 2.6
+* [freetype](https://www.freetype.org/) >= 2.6
 
 Clone or download source code from:
 
