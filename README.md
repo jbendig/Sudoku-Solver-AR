@@ -15,7 +15,6 @@ All of the image processing and computer vision code is written from scratch and
 * [x] Solve puzzle
 * [x] Render puzzle solution
 * [x] Composite solution over original puzzle
-* [ ] Increase Robustness
 
 ## Building and Running
 
