@@ -13,13 +13,7 @@
 #include <iostream>
 #include <cstdio>
 
-static
-#ifdef __linux
-std::experimental::optional<std::string>
-#elif defined _WIN32
-std::optional<std::string>
-#endif
-ReadFile(const std::string& path)
+static std::optional<std::string> ReadFile(const std::string& path)
 {
 	FILE* file = fopen(path.c_str(),"rb");
 	if(file == nullptr)
@@ -76,12 +70,7 @@ ShaderProgram::~ShaderProgram()
 	glDeleteProgram(program);
 }
 
-#ifdef __linux
-std::experimental::optional<ShaderProgram>
-#elif defined _WIN32
-std::optional<ShaderProgram>
-#endif
-ShaderProgram::FromFile(const std::string& vertexShaderPath,const std::string& fragmentShaderPath)
+std::optional<ShaderProgram> ShaderProgram::FromFile(const std::string& vertexShaderPath,const std::string& fragmentShaderPath)
 {
 	//Load source from file.
 	const auto vertexFileData = ReadFile(vertexShaderPath);

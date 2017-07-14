@@ -23,7 +23,7 @@ All of the image processing and computer vision code is written from scratch and
 Requirements
 
 * [CMake](https://cmake.org/) >= 3.6.2
-* GCC >= 6.3.1 OR clang >= 3.9.1
+* GCC >= 7.1.1 OR clang >= 4.0.0
 * [GLFW](http://www.glfw.org/) >= 3.2
 * [glm](http://glm.g-truc.net/) >= 0.9.8
 * mesa-libGL

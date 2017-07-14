@@ -106,12 +106,7 @@ Camera::~Camera()
 #endif
 }
 
-#ifdef __linux
-std::experimental::optional<Camera>
-#elif defined _WIN32
-std::optional<Camera>
-#endif
-Camera::Open(const std::string& devicePath)
+std::optional<Camera> Camera::Open(const std::string& devicePath)
 {
 #ifdef __linux
 	const int fd = open(devicePath.c_str(),O_RDONLY);

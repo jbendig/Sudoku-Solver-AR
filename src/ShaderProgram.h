@@ -12,11 +12,7 @@
 #ifndef SHADERPROGRAM_H
 #define SHADERPROGRAM_H
 
-#ifdef __linux
-#include <experimental/optional>
-#elif defined _WIN32
 #include <optional>
-#endif
 #include <string>
 
 #ifdef __linux
@@ -31,13 +27,7 @@ class ShaderProgram
 		ShaderProgram(ShaderProgram&& other);
 		~ShaderProgram();
 
-		static
-#ifdef __linux
-			std::experimental::optional<ShaderProgram>
-#elif defined _WIN32
-			std::optional<ShaderProgram>
-#endif
-			FromFile(const std::string& vertexShaderPath,const std::string& fragmentShaderPath);
+		static std::optional<ShaderProgram> FromFile(const std::string& vertexShaderPath,const std::string& fragmentShaderPath);
 
 		void Use() const;
 		GLuint Uniform(const std::string& uniformName) const;

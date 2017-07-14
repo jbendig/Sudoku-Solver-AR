@@ -13,11 +13,10 @@
 #define CAMERA_H
 
 #include <vector>
+#include <optional>
 #ifdef __linux
-#include <experimental/optional>
 #include <linux/videodev2.h>
 #elif defined _WIN32
-#include <optional>
 #include "ComHelp.h"
 struct IMFSourceReader;
 #else
@@ -32,13 +31,7 @@ class Camera
 		Camera(Camera&& other);
 		~Camera();
 
-		static
-#ifdef __linux
-			std::experimental::optional<Camera>
-#elif defined _WIN32
-			std::optional<Camera>
-#endif
-			Open(const std::string& devicePath);
+		static std::optional<Camera> Open(const std::string& devicePath);
 		//TODO: Support camera enumeration.
 
 		bool CaptureFrameRGB(Image& frame);
