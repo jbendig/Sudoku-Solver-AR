@@ -97,7 +97,7 @@ static void RunNetwork(const std::vector<std::vector<AlignedVector>>& layers,con
 
 		AlignedVector& outputs = layerOutputs[x];
 #pragma omp parallel for
-		for(int y = 0;y < layer.size();y++) //Signed for OpenMP 2.0.
+		for(int y = 0;y < static_cast<int>(layer.size());y++) //Signed for OpenMP 2.0.
 		{
 			const AlignedVector& weights = layer[y];
 
@@ -148,7 +148,7 @@ static void RunNetworkTrained(const std::vector<std::vector<AlignedVector>>& lay
 
 		AlignedVector& outputs = layerOutputs[x];
 #pragma omp parallel for
-		for(int y = 0;y < layer.size();y++) //Signed for OpenMP 2.0.
+		for(int y = 0;y < static_cast<int>(layer.size());y++) //Signed for OpenMP 2.0.
 		{
 			const AlignedVector& weights = layer[y];
 
@@ -223,7 +223,7 @@ NeuralNetwork NeuralNetwork::Train(std::function<void(std::vector<std::pair<std:
 
 				layerLittleDeltas[l].resize(layer.size());
 #pragma omp parallel for
-				for(int y = 0;y < layer.size();y++) //Signed for OpenMP 2.0.
+				for(int y = 0;y < static_cast<int>(layer.size());y++) //Signed for OpenMP 2.0.
 				{
 					float littleDelta = 0.0f;
 					for(unsigned int z = 0;z < layerLittleDeltas[l + 1].size();z++)
