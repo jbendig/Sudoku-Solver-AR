@@ -43,6 +43,7 @@ static constexpr char PUZZLE_SOLUTION_FONT[] = "C:/Windows/Fonts/times.ttf";
 #error Platform not supported
 #endif
 
+static bool drawCanny = true;
 static bool drawLines = false;
 static bool drawLineClusters = false;
 static bool drawPossiblePuzzleLineClusters = false;
@@ -649,14 +650,16 @@ void OnKey(GLFWwindow* window,int key,int scancode,int action,int mode)
 	if(key == GLFW_KEY_ESCAPE)
 		glfwSetWindowShouldClose(window,GL_TRUE);
 	else if(key == GLFW_KEY_0)
-		drawHoughTransform = !drawHoughTransform;
+		drawCanny = !drawCanny;
 	else if(key == GLFW_KEY_1)
-		drawLines = !drawLines;
+		drawHoughTransform = !drawHoughTransform;
 	else if(key == GLFW_KEY_2)
-		drawLineClusters = !drawLineClusters;
+		drawLines = !drawLines;
 	else if(key == GLFW_KEY_3)
-		drawPossiblePuzzleLineClusters = !drawPossiblePuzzleLineClusters;
+		drawLineClusters = !drawLineClusters;
 	else if(key == GLFW_KEY_4)
+		drawPossiblePuzzleLineClusters = !drawPossiblePuzzleLineClusters;
+	else if(key == GLFW_KEY_5)
 		drawRandomPuzzle = !drawRandomPuzzle;
 }
 
@@ -728,7 +731,10 @@ int __stdcall WinMain(void*,void*,void*,int)
 		greyscaleFrame.MatchSize(*inputFrame);
 		RGBToGreyscale(&inputFrame->data[0],greyscaleFrame);
 		canny.Process(greyscaleFrame,cannyFrame);
-		BlendAdd(*inputFrame,cannyFrame,mergedFrame);
+		if(drawCanny)
+			BlendAdd(*inputFrame,cannyFrame,mergedFrame);
+		else
+			mergedFrame = *inputFrame;
 
 		HoughTransform(cannyFrame,houghTransformFrame);
 
