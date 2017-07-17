@@ -4,6 +4,8 @@
 
 All of the image processing and computer vision code is written from scratch and does not use any external libraries.
 
+![Screenshot](screenshot.png)
+
 ## Progress
 
 * [x] Capture video from webcam
