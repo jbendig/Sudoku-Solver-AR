@@ -40,6 +40,7 @@ static constexpr unsigned int PUZZLE_DISPLAY_HEIGHT = PUZZLE_DISPLAY_WIDTH;
 static constexpr char PUZZLE_SOLUTION_FONT[] = "/usr/share/fonts/oxygen/Oxygen-Sans.ttf";
 #elif defined _WIN32
 static constexpr char PUZZLE_SOLUTION_FONT[] = "C:/Windows/Fonts/times.ttf";
+#else
 #error Platform not supported
 #endif
 
