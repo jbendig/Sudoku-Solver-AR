@@ -1,6 +1,6 @@
 # Sudoku Solver AR
 
-**Sudoku Solver AR** is an augmented reality sudoku solver. It captures video using a camera, finds sudoku puzzles in the video, and then displays answers to those puzzles in such a way that they look like they are part of the original scene.
+**Sudoku Solver AR** is an augmented reality Sudoku solver. It captures video using a camera, finds Sudoku puzzles in the video, and then displays answers to those puzzles in such a way that they look like they are part of the original scene.
 
 All of the image processing and computer vision code is written from scratch and does not use any external libraries.
 
@@ -87,6 +87,23 @@ Run CMake in the resulting directory and configure the following variables:
 
 Open the `sudoku_solver_ar.sln` file in the build directory you selected with CMake. Then build and run using Visual Studio. Make sure to connect a supported webcam before running or else the program will fail to start.
 
+## Instructions
+
+Simply point your camera at a Sudoku puzzle. If a puzzle is found, green boxes will be shown on your screen indicating where it thinks the puzzle is. After a moment, these green boxes are replaced with numbers forming a solution to the puzzle. Check out the **Troubleshooting** section below for help.
+
+Note: The neural network used for optical character recognition must be trained the first time the program is run. This process can take several hours! It will periodically save its progress so you can close the program and have it resume automatically on next run. I'll include a pre-trained data set in the future so eventually this part can be skipped.
+
+## Controls
+
+| **Key** | **Action** |
+|---------|------------|
+| Escape  | Close program |
+| 0       | Toggle drawing of canny edge detection over output (Default: On) |
+| 1       | Toggle drawing of hough transform (Default: Off) |
+| 2       | Toggle drawing of detected lines over output (Default: Off) |
+| 3       | Toggle drawing of detected lines colored by clustered orientation over output (Default: Off) |
+| 5       | Toggle drawing of randomly generated puzzles used as input for training the neural network (Default: Off) |
+
 ## Camera Support
 
 Camera support is currently extremely limited. Only cameras that output the following formats will work.
@@ -95,6 +112,15 @@ Camera support is currently extremely limited. Only cameras that output the foll
 |-----------|-------------|
 | YUV 4:2:2 | NV12        |
 |           | RGB24       |
+
+## Troubleshooting
+
+Sudoku Solver AR is fairly robust at recognizing puzzles under different lighting conditions and fonts. It can have problems if the surface the puzzle is printed on is warped or the camera is pointed at an extreme angle. Here's a list of things to try to improve recognition.
+
+- Flatten the surface that the puzzle is printed on.
+- Keep the camera parallel to the puzzle's surface.
+- Move the camera closer to the puzzle.
+- Use a higher resolution camera.
 
 ## Licensing
 
