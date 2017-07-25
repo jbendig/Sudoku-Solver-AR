@@ -434,7 +434,7 @@ void Gaussian(const Image& inputImage,Image& outputImage,const float radius)
 
 	//Blur horizontally.
 	//TODO: Support edges or document the current behavior.
-	for(unsigned int y = weightRadius;y < inputImage.height - weightRadius;y++)
+	for(unsigned int y = 0;y < inputImage.height;y++)
 	{
 		for(unsigned int x = weightRadius;x < inputImage.width - weightRadius;x++)
 		{
