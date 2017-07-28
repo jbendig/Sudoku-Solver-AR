@@ -144,6 +144,7 @@ std::optional<Camera> Camera::Open(const std::string& devicePath)
 		{
 			devices.push_back(MakeComPtr(devicesPtrs[x]));
 		}
+		CoTaskMemFree(devicesPtrs);
 		attributes->Release();
 
 		if(deviceCount == 0 || hr != S_OK)
