@@ -47,7 +47,6 @@ class Canny
 		Image gaussianImage;
 		std::vector<float> normalizedHistogram;
 		std::vector<float> gradient;
-		Image nonMaximumSuppression;
 	private:
 		float gaussianBlurRadius;
 

@@ -105,29 +105,7 @@ static void NonMaximumSuppression(const std::vector<float>& gradient,const unsig
 
 	assert(gradient.size() == width * height * 2);
 
-	std::vector<unsigned char> roundedGradient(gradient.size(),0);
-	for(unsigned int y = 1;y < height - 1;y++)
-	{
-		for(unsigned int x = 1;x < width - 1;x++)
-		{
-			const unsigned int index = (y * width + x) * 2;
-
-			//Extract magnitude directly. In theory, the range is
-			//[0.0f,sqrtf(255 * 255 + 255 * 255)] and should be mapped to [0,255]. However, not
-			//doing helps find stronger lines.
-			const unsigned char magnitude = ClampToU8(gradient[index + 0]);
-
-			//Simplify direction from radians to vertical, horizontal, left diagonal, or right diagonal.
-			float directionf = gradient[index + 1];
-			directionf = directionf >= 0.0f ? directionf : directionf + M_PI;
-			directionf = directionf * 4.0f / M_PI;
-			const unsigned char direction = lroundf(directionf) % 4;
-
-			roundedGradient[index + 0] = magnitude;
-			roundedGradient[index + 1] = direction;
-		}
-	}
-
+	//Perform Non-Maximum Suppression and Hysterasis Thresholding.
 	nonMaximumSuppression.resize(width * height * 3);
 	std::fill(nonMaximumSuppression.begin(),nonMaximumSuppression.end(),0);
 	for(unsigned int y = 1;y < height - 1;y++)
@@ -137,22 +115,38 @@ static void NonMaximumSuppression(const std::vector<float>& gradient,const unsig
 			const unsigned int inputIndex = (y * width + x) * 2;
 			const unsigned int outputIndex = (y * width + x) * 3;
 
-			const unsigned char magnitude = roundedGradient[inputIndex + 0];
-			const unsigned char direction = roundedGradient[inputIndex + 1];
+			const float magnitude = gradient[inputIndex + 0];
 
+			//Discretize angle into one of four fixed steps to indicate which direction the edge is
+			//running along: horizontal, vertical, left-to-right diagonal, or right-to-left
+			//diagonal. The edge direction is 90 degrees from the gradient angle.
+			float angle = gradient[inputIndex + 1];
+
+			//The input angle is in the range of [-pi,pi] but negative angles represent the same
+			//edge direction as angles 180 degrees apart.
+			angle = angle >= 0.0f ? angle : angle + M_PI;
+
+			//Scale from [0,pi] to [0,4] and round to an integer representing a direction. Each
+			//direction is made up of 45 degree blocks. The rounding and modulus handle the
+			//situation where the first and final 45/2 degrees are both part of the same direction.
+			angle = angle * 4.0f / M_PI;
+			const unsigned char direction = lroundf(angle) % 4;
+
+			//Only mark pixels as edges when the gradients of the pixels immediately on either side
+			//of the edge have smaller magnitudes. This keeps the edges thin.
 			bool suppress = false;
-			if(direction == 0)
-				suppress = magnitude < roundedGradient[inputIndex - 2] ||
-						   magnitude < roundedGradient[inputIndex + 2]; //Vertical line.
-			else if(direction == 1)
-				suppress = magnitude < roundedGradient[inputIndex - width * 2 - 2] ||
-						   magnitude < roundedGradient[inputIndex + width * 2 + 2];
-			else if(direction == 2)
-				suppress = magnitude < roundedGradient[inputIndex - width * 2] ||
-						   magnitude < roundedGradient[inputIndex + width * 2]; //Horizontal line.
-			else if(direction == 3)
-				suppress = magnitude < roundedGradient[inputIndex - width * 2 + 2] ||
-						   magnitude < roundedGradient[inputIndex + width * 2 - 2];
+			if(direction == 0) //Vertical edge.
+				suppress = magnitude < gradient[inputIndex - 2] ||
+						   magnitude < gradient[inputIndex + 2];
+			else if(direction == 1) //Right-to-left diagonal edge.
+				suppress = magnitude < gradient[inputIndex - width * 2 - 2] ||
+						   magnitude < gradient[inputIndex + width * 2 + 2];
+			else if(direction == 2) //Horizontal edge.
+				suppress = magnitude < gradient[inputIndex - width * 2] ||
+						   magnitude < gradient[inputIndex + width * 2];
+			else if(direction == 3) //Left-to-right diagonal edge.
+				suppress = magnitude < gradient[inputIndex - width * 2 + 2] ||
+						   magnitude < gradient[inputIndex + width * 2 - 2];
 
 			if(suppress || magnitude < lowThreshold)
 			{
@@ -162,45 +156,55 @@ static void NonMaximumSuppression(const std::vector<float>& gradient,const unsig
 			}
 			else
 			{
-				nonMaximumSuppression[outputIndex + 0] = magnitude >= highThreshold ? 255 : 0;
-				nonMaximumSuppression[outputIndex + 1] = magnitude < highThreshold ? magnitude : 0;
+				//Use thresholding to indicate strong and weak edges. Strong edges are assumed to be
+				//valid edges. Connectivity analysis is used to check if a weak edge is connected to
+				//a strong edge indiciating that the weak edge is also a valid edge.
+				nonMaximumSuppression[outputIndex + 0] = magnitude >= highThreshold ? 255 : 0; //Strong
+				nonMaximumSuppression[outputIndex + 1] = magnitude < highThreshold ? 255 : 0; //Weak
 				nonMaximumSuppression[outputIndex + 2] = 0;
 			}
 		}
 	}
+}
 
-	//Perform hysterasis thresholding.
+static void ConnectivityAnalysis(Image& image)
+{
+	assert(image.width >= 1 && image.height >= 1);
+
+	//Input image should be output of NonMaximumSuppression().
 	//Channel 0: Strong edge pixels.
 	//Channel 1: Weak edge pixels.
 	//Channel 2: Pixel has been visited previously (strong edge only).
+
+	//Repeat process until it converges and there is no change.
 	//TODO: This is probably slower than a flood-fill-like search.
 	bool found = false;
 	while(!found)
 	{
 		found = false;
 
-		for(unsigned int y = 1;y < height - 1;y++)
+		for(unsigned int y = 1;y < image.height - 1;y++)
 		{
-			for(unsigned int x = 1;x < width - 1;x++)
+			for(unsigned int x = 1;x < image.width - 1;x++)
 			{
-				const unsigned int index = (y * width + x) * 3;
+				const unsigned int index = (y * image.width + x) * 3;
 
 				//Skip pixels that are not strong edges or have been previously visited.
-				if(nonMaximumSuppression[index + 0] == 0 || nonMaximumSuppression[index + 2] == 255)
+				if(image.data[index + 0] == 0 || image.data[index + 2] == 255)
 					continue;
 
-				nonMaximumSuppression[index + 2] = 255;
+				image.data[index + 2] = 255;
 				found = true;
 
-				auto TryWeakEdge = [&nonMaximumSuppression,width](const unsigned int x,const unsigned int y)
+				auto TryWeakEdge = [&image](const unsigned int x,const unsigned int y)
 				{
-					const unsigned int index = (y * width + x) * 3;
-					if(nonMaximumSuppression[index + 1] == 0)
+					const unsigned int index = (y * image.width + x) * 3;
+					if(image.data[index + 1] == 0)
 						return;
 
 					//Promote to strong edge.
-					nonMaximumSuppression[index + 0] = 255;
-					nonMaximumSuppression[index + 1] = 0;
+					image.data[index + 0] = 255;
+					image.data[index + 1] = 0;
 				};
 				TryWeakEdge(x - 1,y - 1);
                 TryWeakEdge(x    ,y - 1);
@@ -506,60 +510,6 @@ void Sobel(const Image& image,std::vector<float>& gradient)
 	}
 }
 
-void LineThinning(const Image& inputImage,Image& outputImage)
-{
-    //Based on Digital Image Processing Third Edition. Chapter 9.5.5. Page 649.
-    //Only one pass is performed which is all that is required for Canny. Normally, this is run
-    //repeatedly until it converges.
-
-	std::vector<std::vector<unsigned char>> masks = {
-        {0,0,0,2,1,2,1,1,1},
-        {2,0,0,1,1,0,1,1,2},
-        {1,2,0,1,1,0,1,2,0},
-        {1,1,2,1,1,0,2,0,0},
-        {1,1,1,2,1,2,0,0,0},
-        {2,1,1,0,1,1,0,0,2},
-        {0,2,1,0,1,1,0,2,1},
-        {0,0,2,0,1,1,2,1,1},
-    };
-
-	outputImage.MatchSize(inputImage);
-	std::copy(inputImage.data.begin(),inputImage.data.end(),outputImage.data.begin());
-
-	for(auto mask : masks)
-	{
-		for(unsigned int y = 1;y < inputImage.height - 1;y++)
-		{
-			for(unsigned int x = 1;x < inputImage.width - 1;x++)
-			{
-				const unsigned int index = (y * inputImage.width + x) * 3;
-                if(inputImage.data[index + 0] != 255)
-                    continue;
-
-				auto MatchMask = [&mask,&inputImage](const unsigned int maskIndex,const unsigned int x,const unsigned int y)
-				{
-					const unsigned char value = inputImage.data[(y * inputImage.width + x) * 3];
-					if(mask[maskIndex] == 0)
-						return value == 0;
-					else if(mask[maskIndex] == 1)
-						return value == 255;
-					else
-						return true;
-				};
-
-                if(MatchMask(0,x - 1,y - 1) && MatchMask(1,x,y - 1) && MatchMask(2,x + 1,y - 1) &&
-				   MatchMask(3,x - 1,y    ) && MatchMask(4,x,y    ) && MatchMask(5,x + 1,y    ) &&
-				   MatchMask(6,x - 1,y + 1) && MatchMask(7,x,y + 1) && MatchMask(8,x + 1,y + 1))
-				{
-                    outputImage.data[index + 0] = 0;
-                    outputImage.data[index + 1] = 0;
-                    outputImage.data[index + 2] = 0;
-                }
-            }
-        }
-    }
-}
-
 void HoughTransform(const Image& inputImage,Image& accumulationImage)
 {
     //Based on Digital Image Processing Third Edition. Chapter 10.2.7. Page 733.
@@ -634,11 +584,10 @@ void Canny::Process(const Image& inputImage,Image& outputImage)
 	Histogram(gaussianImage,normalizedHistogram);
 	const float highThreshold = OtsusMethod(normalizedHistogram);
 	const float lowThreshold = highThreshold / 2;
-	NonMaximumSuppression(gradient,inputImage.width,inputImage.height,nonMaximumSuppression.data,lowThreshold,highThreshold);
+	outputImage.MatchSize(inputImage);
+	NonMaximumSuppression(gradient,inputImage.width,inputImage.height,outputImage.data,lowThreshold,highThreshold);
 
-	nonMaximumSuppression.width = inputImage.width;
-	nonMaximumSuppression.height = inputImage.height;
-	LineThinning(nonMaximumSuppression,outputImage);
+	ConnectivityAnalysis(outputImage);
 }
 
 Canny::Canny(const float gaussianBlurRadius)
