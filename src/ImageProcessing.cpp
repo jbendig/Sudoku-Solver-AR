@@ -178,8 +178,8 @@ static void ConnectivityAnalysis(Image& image)
 
 	//Repeat process until it converges and there is no change.
 	//TODO: This is probably slower than a flood-fill-like search.
-	bool found = false;
-	while(!found)
+	bool found = true;
+	while(found)
 	{
 		found = false;
 
