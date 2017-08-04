@@ -12,6 +12,7 @@
 #include "ImageProcessing.h"
 #include <algorithm>
 #include <numeric>
+#include <stack>
 #include <cmath>
 #include <cstring>
 
@@ -174,46 +175,64 @@ static void ConnectivityAnalysis(Image& image)
 	//Input image should be output of NonMaximumSuppression().
 	//Channel 0: Strong edge pixels.
 	//Channel 1: Weak edge pixels.
-	//Channel 2: Pixel has been visited previously (strong edge only).
+	//Channel 2: Should be set to 0. Will be used to indicate an edge that has been previously
+	//           visited.
+	//Output image will have all weak edges connected to strong edges set to strong edges
+	//themselves. Meaning only the first channel will have useful data and the other remaining
+	//channels should be ignored.
 
-	//Repeat process until it converges and there is no change.
-	//TODO: This is probably slower than a flood-fill-like search.
-	bool found = true;
-	while(found)
+	//Keep track of coordinates that should be searched in case they are connected.
+	std::stack<std::pair<unsigned int,unsigned int>> searchStack;
+
+	//Add all 8 coordinates around (x,y) to be searched.
+	auto PushSearchConnected = [&searchStack](const unsigned int x,const unsigned int y) {
+		searchStack.push(std::make_pair(x - 1,y - 1));
+		searchStack.push(std::make_pair(x    ,y - 1));
+		searchStack.push(std::make_pair(x + 1,y - 1));
+		searchStack.push(std::make_pair(x - 1,y));
+		searchStack.push(std::make_pair(x    ,y));
+		searchStack.push(std::make_pair(x + 1,y));
+		searchStack.push(std::make_pair(x - 1,y + 1));
+		searchStack.push(std::make_pair(x    ,y + 1));
+		searchStack.push(std::make_pair(x + 1,y + 1));
+	};
+
+	//Search for strong edges and flood fill surrounding weak edges, promoting the weak to strong.
+	for(unsigned int y = 1;y < image.height - 1;y++)
 	{
-		found = false;
-
-		for(unsigned int y = 1;y < image.height - 1;y++)
+		for(unsigned int x = 1;x < image.width - 1;x++)
 		{
-			for(unsigned int x = 1;x < image.width - 1;x++)
-			{
-				const unsigned int index = (y * image.width + x) * 3;
+			const unsigned int index = (y * image.width + x) * 3;
 
-				//Skip pixels that are not strong edges or have been previously visited.
-				if(image.data[index + 0] == 0 || image.data[index + 2] == 255)
+			//Skip pixels that are not strong edges or have been previously visited.
+			if(image.data[index + 0] == 0 || image.data[index + 2] == 255)
+				continue;
+
+			//Mark pixel as visited to save time flood filling later.
+			image.data[index + 2] = 255;
+
+			//Flood fill all connected weak edges.
+			PushSearchConnected(x,y);
+			while(!searchStack.empty())
+			{
+				const std::pair<unsigned int,unsigned int> coordinates = searchStack.top();
+				searchStack.pop();
+
+				//Skip pixels that are not weak edges.
+				const unsigned int x = coordinates.first;
+				const unsigned int y = coordinates.second;
+				const unsigned int index = (y * image.width + x) * 3;
+				if(image.data[index + 1] == 0)
 					continue;
 
+				//Promote to strong edge and mark visited to save time flood filling later.
+				image.data[index + 0] = 255;
+				image.data[index + 1] = 0;
 				image.data[index + 2] = 255;
-				found = true;
 
-				auto TryWeakEdge = [&image](const unsigned int x,const unsigned int y)
-				{
-					const unsigned int index = (y * image.width + x) * 3;
-					if(image.data[index + 1] == 0)
-						return;
-
-					//Promote to strong edge.
-					image.data[index + 0] = 255;
-					image.data[index + 1] = 0;
-				};
-				TryWeakEdge(x - 1,y - 1);
-                TryWeakEdge(x    ,y - 1);
-                TryWeakEdge(x + 1,y - 1);
-                TryWeakEdge(x - 1,y);
-                TryWeakEdge(x + 1,y);
-                TryWeakEdge(x - 1,y + 1);
-                TryWeakEdge(x    ,y + 1);
-                TryWeakEdge(x + 1,y + 1);
+				//Search around this coordinate as well. This will waste time checking the previous
+				//coordinate again but it's fast enough.
+				PushSearchConnected(x,y);
 			}
 		}
 	}
