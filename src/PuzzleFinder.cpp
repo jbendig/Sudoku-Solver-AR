@@ -12,9 +12,6 @@
 #include "PuzzleFinder.h"
 #include <algorithm>
 #include <cmath>
-#ifdef _WIN32
-#include <intrin.h>
-#endif
 #include "Image.h"
 
 //An angle must be +/- this delta to be considered similar.
@@ -148,7 +145,6 @@ static void FindPossiblePuzzleLines(std::vector<std::vector<Line>>& lineClusters
 	//4     4     4     4
 	//We're looking for the lines that line up with the the 4s. If we can find two sets of lines
 	//that have the same count and are about pi/2 apart from each other, we've found a puzzle!
-	//TODO: TONS of room for optimization here if necessary.
 
 	//How close the gap between the lines should be from the expected average. Where the expected
 	//average is (furthest_line - closest_line) / 3.
@@ -165,61 +161,43 @@ static void FindPossiblePuzzleLines(std::vector<std::vector<Line>>& lineClusters
 		});
 	}
 
-	auto GetSetBitIndexes = [](const unsigned int value,unsigned int* indexes)
-	{
-		unsigned int outputIndex = 0;
-		for(unsigned int x = 0;x < 32 && outputIndex < 4;x++)
-		{
-			if((value & (1 << x)) > 0)
-			{
-				indexes[outputIndex] = x;
-				outputIndex += 1;
-			}
-		}
-	};
 	for(const std::vector<Line>& lineCluster : lineClusters)
 	{
-		if(lineCluster.size() < 4)
-			continue;
-		else if(lineCluster.size() > 32)
-			continue;
-
 		float largestEvenlySpacedLinesRange = 0.0f;
 		std::vector<Line> largestEvenlySpacedLines;
-		const unsigned int finalSubset = 0b1111 << (lineCluster.size() - 4);
-		for(unsigned int x = 0;x < finalSubset + 1;x++)
+		const size_t lineClusterSize = lineCluster.size();
+
+		for(unsigned int w = 0;w < lineClusterSize;w++)
 		{
-#ifdef __linux
-			const unsigned int count = __builtin_popcount(x);
-#elif defined _WIN32
-			const unsigned int count = __popcnt(x);
-#endif
-			if(count != 4)
-				continue;
-
-			unsigned int indexes[4];
-			GetSetBitIndexes(x,indexes);
-
-			const Line line0 = lineCluster[indexes[0]];
-			const Line line1 = lineCluster[indexes[1]];
-			const Line line2 = lineCluster[indexes[2]];
-			const Line line3 = lineCluster[indexes[3]];
-
-			const float range = line3.rho - line0.rho;
-			if(range < largestEvenlySpacedLinesRange)
-				continue;
-
-			const float mean = range / 3.0f;
-			const float delta0 = line1.rho - line0.rho;
-			const float delta1 = line2.rho - line1.rho;
-			const float delta2 = line3.rho - line2.rho;
-
-			if(fabsf(delta0 - mean) < DELTA_THRESHOLD &&
-			   fabsf(delta1 - mean) < DELTA_THRESHOLD &&
-			   fabsf(delta2 - mean) < DELTA_THRESHOLD)
+			for(unsigned int z = w + 1;z < lineClusterSize;z++)
 			{
-				largestEvenlySpacedLinesRange = range;
-				largestEvenlySpacedLines = {line0,line1,line2,line3};
+				for(unsigned int y = z + 1;y < lineClusterSize;y++)
+				{
+					for(unsigned int x = y + 1;x < lineClusterSize;x++)
+					{
+						const Line line0 = lineCluster[w];
+						const Line line1 = lineCluster[z];
+						const Line line2 = lineCluster[y];
+						const Line line3 = lineCluster[x];
+
+						const float range = line3.rho - line0.rho;
+						if(range < largestEvenlySpacedLinesRange)
+							continue;
+
+						const float mean = range / 3.0f;
+						const float delta0 = line1.rho - line0.rho;
+						const float delta1 = line2.rho - line1.rho;
+						const float delta2 = line3.rho - line2.rho;
+
+						if(fabsf(delta0 - mean) < DELTA_THRESHOLD &&
+						   fabsf(delta1 - mean) < DELTA_THRESHOLD &&
+						   fabsf(delta2 - mean) < DELTA_THRESHOLD)
+						{
+							largestEvenlySpacedLinesRange = range;
+							largestEvenlySpacedLines = {line0,line1,line2,line3};
+						}
+					}
+				}
 			}
 		}
 
